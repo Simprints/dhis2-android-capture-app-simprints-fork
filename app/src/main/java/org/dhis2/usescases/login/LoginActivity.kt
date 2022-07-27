@@ -387,6 +387,11 @@ class LoginActivity : ActivityGlobalAbstract(), LoginContracts.View {
                         }
 
                         override fun onNegativeClick() {
+                            presenter.saveUserCredentials(
+                                binding.serverUrlEdit.text.toString(),
+                                binding.userNameEdit.text.toString(),
+                                ""
+                            )
                             goToNextScreen()
                         }
                     }
