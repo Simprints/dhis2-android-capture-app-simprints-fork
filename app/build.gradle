@@ -83,6 +83,9 @@ android {
         // excluding duplicate rxjava properties file
         // see https://github.com/ReactiveX/RxJava/issues/4445#issuecomment-243591879
         exclude 'META-INF/rxjava.properties'
+        exclude 'META-INF/core_release.kotlin_module'
+        exclude 'META-INF/LGPL2.1'
+
     }
 
     buildTypes {
@@ -177,7 +180,7 @@ android {
             applicationId "org.simprints.dhis2"
             dimension "default"
             versionCode versions.vCode
-            versionName "2.5.2-simprints-fork-2"
+            versionName "2.5.3-simprints-fork-2"
         }
     }
 
