@@ -44,6 +44,7 @@ import org.dhis2.commons.data.EventViewModel;
 import org.dhis2.commons.data.StageSection;
 import org.dhis2.commons.dialogs.CustomDialog;
 import org.dhis2.commons.dialogs.DialogClickListener;
+import org.dhis2.data.biometrics.BiometricsClient;
 import org.dhis2.data.biometrics.BiometricsClientFactory;
 import org.dhis2.data.biometrics.VerifyResult;
 import org.dhis2.commons.dialogs.imagedetail.ImageDetailBottomDialog;
@@ -78,6 +79,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.inject.Inject;
@@ -137,7 +139,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     private PopupMenu popupMenu;
 
     public static TEIDataFragment newInstance(String programUid, String teiUid,
-            String enrollmentUid) {
+                                              String enrollmentUid) {
         TEIDataFragment fragment = new TEIDataFragment();
         Bundle args = new Bundle();
         args.putString("PROGRAM_UID", programUid);
@@ -171,7 +173,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-            @Nullable Bundle savedInstanceState) {
+                             @Nullable Bundle savedInstanceState) {
         binding = DataBindingUtil.inflate(inflater, R.layout.fragment_tei_data, container, false);
         binding.setPresenter(presenter);
         activity.observeGrouping().observe(getViewLifecycleOwner(), group -> {
@@ -238,8 +240,14 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     }
 
     @Override
-    public void launchBiometricsVerification(String guid, String orgUnitUid) {
-        BiometricsClientFactory.INSTANCE.get(context).verify(this, guid, orgUnitUid);
+    public void launchBiometricsVerification(String guid, String orgUnitUid, String trackedEntityInstanceId) {
+
+        BiometricsClient biometricsClient = BiometricsClientFactory.INSTANCE.get(context);
+
+        HashMap extras = new HashMap<>();
+        extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
+
+        biometricsClient.verify(this, guid, orgUnitUid, extras);
     }
 
     @Override
@@ -320,7 +328,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
 
     @Override
     public void setTrackedEntityInstance(TrackedEntityInstance trackedEntityInstance,
-            OrganisationUnit organisationUnit) {
+                                         OrganisationUnit organisationUnit) {
         binding.setTrackEntity(trackedEntityInstance);
         binding.cardFront.orgUnit.setText(organisationUnit.displayName());
     }

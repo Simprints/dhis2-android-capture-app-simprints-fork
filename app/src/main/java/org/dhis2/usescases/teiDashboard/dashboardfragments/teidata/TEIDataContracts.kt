@@ -55,7 +55,11 @@ class TEIDataContracts {
         fun showProgramRuleErrorMessage(message: String)
 
         //Eyeseetea
-        fun launchBiometricsVerification(guid: String, orgUnitUid: String)
+        fun launchBiometricsVerification(
+            guid: String,
+            orgUnitUid: String,
+            trackedEntityInstance: String
+        )
 
         fun resetVerificationStatus()
 

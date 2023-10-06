@@ -41,6 +41,8 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
     private final int biometricsVerificationStatus;
     private final String teiOrgUnitUid;
 
+    private final String trackedEntityInstanceId;
+
     public EventCapturePagerAdapter(FragmentActivity fragmentActivity,
                                     String programUid,
                                     String eventUid,
@@ -69,6 +71,7 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
         biometricsGuid = null;
         biometricsVerificationStatus = -1;
         teiOrgUnitUid = null;
+        trackedEntityInstanceId = null;
     }
 
     public EventCapturePagerAdapter(
@@ -80,7 +83,8 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
             boolean openErrorSection,
             String biometricsGuid,
             int status,
-            String teiOrgUnit) {
+            String teiOrgUnit,
+            String trackedEntityInstanceId) {
         super(fragmentActivity);
         this.programUid = programUid;
         this.eventUid = eventUid;
@@ -100,6 +104,7 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
         this.biometricsGuid = biometricsGuid;
         this.biometricsVerificationStatus = status;
         this.teiOrgUnitUid = teiOrgUnit;
+        this.trackedEntityInstanceId = trackedEntityInstanceId;
     }
 
     public int getDynamicTabIndex(@IntegerRes int tabClicked) {
@@ -136,7 +141,7 @@ public class EventCapturePagerAdapter extends FragmentStateAdapter {
                 });
                 return eventDetailsFragment;
             case DATA_ENTRY:
-                formFragment = EventCaptureFormFragment.newInstance(eventUid, shouldOpenErrorSection,biometricsGuid, biometricsVerificationStatus,teiOrgUnitUid);
+                formFragment = EventCaptureFormFragment.newInstance(eventUid, shouldOpenErrorSection,biometricsGuid, biometricsVerificationStatus,teiOrgUnitUid,trackedEntityInstanceId);
                 return formFragment;
             case ANALYTICS:
                 Fragment indicatorFragment = new IndicatorsFragment();

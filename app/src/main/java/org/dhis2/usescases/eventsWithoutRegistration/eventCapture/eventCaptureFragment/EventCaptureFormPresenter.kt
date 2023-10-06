@@ -27,6 +27,7 @@ class EventCaptureFormPresenter(
     private var biometricsVerificationStatus: Int = -1
     private var biometricsGuid: String? = null
     private var teiOrgUnit: String? = null
+    private var trackedEntityInstanceId: String? = null
 
     private var biometricsVerificationUiModel: BiometricsVerificationUiModelImpl? = null
 
@@ -80,7 +81,7 @@ class EventCaptureFormPresenter(
             biometricsVerificationUiModel?.setBiometricsRetryListener(
                 object : BiometricsVerificationUiModelImpl.BiometricsReTryOnClickListener {
                     override fun onRetryClick() {
-                        view.verifyBiometrics(biometricsGuid, teiOrgUnit)
+                        view.verifyBiometrics(biometricsGuid, teiOrgUnit, trackedEntityInstanceId)
                     }
                 }
             )
@@ -125,7 +126,7 @@ class EventCaptureFormPresenter(
                     true
                 )
             ) {
-                view.verifyBiometrics(this.biometricsGuid, this.teiOrgUnit)
+                view.verifyBiometrics(this.biometricsGuid, this.teiOrgUnit, this.trackedEntityInstanceId)
             } else {
                 refreshBiometricsVerificationStatus(1, false)
             }
@@ -148,11 +149,13 @@ class EventCaptureFormPresenter(
     fun initBiometricsValues(
         biometricsGuid: @Nullable String?,
         biometricsVerificationStatus: Int,
-        teiOrgUnit: @Nullable String?
+        teiOrgUnit: @Nullable String?,
+        trackedEntityInstanceId: @Nullable String?
     ) {
         this.biometricsGuid = biometricsGuid
         this.biometricsVerificationStatus = biometricsVerificationStatus
         this.teiOrgUnit = teiOrgUnit
+        this.trackedEntityInstanceId = trackedEntityInstanceId
     }
 
     fun refreshBiometricsVerificationStatus(

@@ -443,13 +443,13 @@ public class TEIDataPresenter {
 
         Intent intent = new Intent(view.getContext(), EventCaptureActivity.class);
         intent.putExtras(EventCaptureActivity.getActivityBundleWithBiometrics(uid, programUid,
-                EventMode.CHECK, guid, status, orgUnitUid));
+                EventMode.CHECK, guid, status, orgUnitUid, teiUid));
         view.openEventCapture(intent);
     }
 
     public void verifyBiometrics() {
         view.launchBiometricsVerification(this.dashboardModel.getTrackedBiometricEntityValue(),
-                this.dashboardModel.getCurrentOrgUnit().uid());
+                this.dashboardModel.getCurrentOrgUnit().uid(), this.dashboardModel.getTei().uid());
     }
 
     public void handleVerifyResponse(VerifyResult result) {

@@ -23,6 +23,7 @@ import org.dhis2.commons.Constants
 import org.dhis2.commons.Constants.PROGRAM_UID
 import org.dhis2.commons.biometrics.BIOMETRICS_GUID
 import org.dhis2.commons.biometrics.BIOMETRICS_TEI_ORGANISATION_UNIT
+import org.dhis2.commons.biometrics.BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID
 import org.dhis2.commons.biometrics.BIOMETRICS_VERIFICATION_STATUS
 import org.dhis2.commons.dialogs.AlertBottomDialog
 import org.dhis2.commons.dialogs.CustomDialog
@@ -151,7 +152,8 @@ class EventCaptureActivity :
             intent.getBooleanExtra(OPEN_ERROR_LOCATION, false),
             intent.getStringExtra(BIOMETRICS_GUID),
             verificationStatus,
-            intent.getStringExtra(BIOMETRICS_TEI_ORGANISATION_UNIT)
+            intent.getStringExtra(BIOMETRICS_TEI_ORGANISATION_UNIT) ,
+            intent.getStringExtra(BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID)
         )
     }
 
@@ -488,14 +490,17 @@ class EventCaptureActivity :
             eventUid: String,
             programUid: String,
             eventMode: EventMode,
-            guid: String,
+            guid: String?,
             status: Int,
-            orgUnitUid: String
+            orgUnitUid: String,
+            trackedEntityInstanceId: String
         ): Bundle {
             val bundle = getActivityBundle(eventUid, programUid, eventMode)
             bundle.putString(BIOMETRICS_GUID, guid)
             bundle.putInt(BIOMETRICS_VERIFICATION_STATUS, status)
             bundle.putString(BIOMETRICS_TEI_ORGANISATION_UNIT, orgUnitUid)
+            bundle.putString(BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId)
+
             return bundle
         }
 

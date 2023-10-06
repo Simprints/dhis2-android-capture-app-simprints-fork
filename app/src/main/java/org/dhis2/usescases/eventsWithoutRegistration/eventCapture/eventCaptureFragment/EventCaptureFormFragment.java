@@ -1,5 +1,6 @@
 package org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFragment;
 
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID;
 import static org.dhis2.commons.extensions.ViewExtensionsKt.closeKeyboard;
 import static org.dhis2.utils.granularsync.SyncStatusDialogNavigatorKt.OPEN_ERROR_LOCATION;
 
@@ -25,6 +26,7 @@ import androidx.fragment.app.FragmentTransaction;
 
 import org.dhis2.R;
 import org.dhis2.commons.Constants;
+import org.dhis2.data.biometrics.BiometricsClient;
 import org.dhis2.data.biometrics.BiometricsClientFactory;
 import org.dhis2.data.biometrics.VerifyResult;
 import org.dhis2.databinding.SectionSelectorFragmentBinding;
@@ -33,6 +35,8 @@ import org.dhis2.form.ui.FormView;
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.EventCaptureActivity;
 import org.dhis2.usescases.general.FragmentGlobalAbstract;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.HashMap;
 
 import javax.inject.Inject;
 
@@ -52,6 +56,8 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
     private int biometricsVerificationStatus;
     private String teiOrgUnit;
 
+    private String trackedEntityInstanceId;
+
     public static EventCaptureFormFragment newInstance(String eventUid, Boolean openErrorSection) {
         EventCaptureFormFragment fragment = new EventCaptureFormFragment();
         Bundle args = new Bundle();
@@ -61,7 +67,12 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
         return fragment;
     }
 
-    public static EventCaptureFormFragment newInstance(String eventUid, Boolean openErrorSection, String guid, int status, String teiOrgUnit) {
+    public static EventCaptureFormFragment newInstance(
+            String eventUid,
+            Boolean openErrorSection,
+            String guid, int status,
+            String teiOrgUnit,
+            String trackedEntityInstanceId) {
         EventCaptureFormFragment fragment = new EventCaptureFormFragment();
         Bundle args = new Bundle();
         args.putString(Constants.EVENT_UID, eventUid);
@@ -69,6 +80,8 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
         args.putString(BIOMETRICS_GUID, guid);
         args.putInt(BIOMETRICS_VERIFICATION_STATUS, status);
         args.putString(BIOMETRICS_TEI_ORGANISATION_UNIT, teiOrgUnit);
+        args.putString(BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
+
         fragment.setArguments(args);
         return fragment;
     }
@@ -81,6 +94,7 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
         biometricsGuid = getArguments().getString(BIOMETRICS_GUID);
         biometricsVerificationStatus = getArguments().getInt(BIOMETRICS_VERIFICATION_STATUS);
         teiOrgUnit = getArguments().getString(BIOMETRICS_TEI_ORGANISATION_UNIT);
+        trackedEntityInstanceId =  getArguments().getString(BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID);
 
         activity.eventCaptureComponent.plus(
                 new EventCaptureFormModule(
@@ -135,7 +149,7 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
             performSaveClick();
         });
 
-        presenter.initBiometricsValues(biometricsGuid, biometricsVerificationStatus, teiOrgUnit);
+        presenter.initBiometricsValues(biometricsGuid, biometricsVerificationStatus, teiOrgUnit, trackedEntityInstanceId);
 
         return binding.getRoot();
     }
@@ -212,8 +226,10 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
     }
 
     @Override
-    public void verifyBiometrics(@Nullable String biometricsGuid, @Nullable String teiOrgUnit) {
+    public void verifyBiometrics(@Nullable String biometricsGuid, @Nullable String teiOrgUnit, @Nullable String trackedEntityInstanceId) {
+        HashMap extras = new HashMap<>();
+        extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
 
-        BiometricsClientFactory.INSTANCE.get(this.getContext()).verify(this, biometricsGuid, teiOrgUnit);
+        BiometricsClientFactory.INSTANCE.get(this.getContext()).verify(this, biometricsGuid, teiOrgUnit, extras);
     }
 }

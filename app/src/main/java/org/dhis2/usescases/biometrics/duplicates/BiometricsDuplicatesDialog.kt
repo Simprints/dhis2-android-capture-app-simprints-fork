@@ -19,11 +19,11 @@ import com.google.android.material.snackbar.Snackbar
 import io.reactivex.functions.Consumer
 import org.dhis2.Bindings.app
 import org.dhis2.R
+import org.dhis2.commons.biometrics.BIOMETRICS_CONFIRM_IDENTITY_REQUEST
 import org.dhis2.commons.data.SearchTeiModel
+import org.dhis2.data.biometrics.BiometricsClient
 import org.dhis2.data.biometrics.BiometricsClientFactory.get
 import org.dhis2.databinding.DialogBiometricsDuplicatesBinding
-import org.dhis2.commons.biometrics.BIOMETRICS_CONFIRM_IDENTITY_REQUEST
-
 import org.dhis2.utils.LastSelection
 import org.hisp.dhis.android.core.arch.call.D2Progress
 import javax.inject.Inject
@@ -47,7 +47,10 @@ class BiometricsDuplicatesDialog : DialogFragment(), BiometricsDuplicatesDialogV
         val dialog = super.onCreateDialog(savedInstanceState)
         dialog.window!!.requestFeature(Window.FEATURE_NO_TITLE)
         dialog.window!!.setBackgroundDrawableResource(android.R.color.transparent)
-        create(requireArguments().getString(TRACKED_ENTITY_TYPE_UID)!!,requireArguments().getString(PROGRAM_UID)!!)
+        create(
+            requireArguments().getString(TRACKED_ENTITY_TYPE_UID)!!,
+            requireArguments().getString(PROGRAM_UID)!!
+        )
         return dialog
     }
 
@@ -164,7 +167,10 @@ class BiometricsDuplicatesDialog : DialogFragment(), BiometricsDuplicatesDialogV
     ) {
         lastSelection = LastSelection(teiUid, enrollmentUid, isOnline)
 
-        context?.let { get(it).confirmIdentify(this, sessionId, guid) }
+        val extras =
+            mutableMapOf(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID to teiUid)
+
+        context?.let { get(it).confirmIdentify(this, sessionId, guid, extras) }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -190,10 +196,10 @@ class BiometricsDuplicatesDialog : DialogFragment(), BiometricsDuplicatesDialogV
         this.onEnrollNewListener = onEnrollNewListener
     }
 
-    private fun create(teiType: String, program:String) {
+    private fun create(teiType: String, program: String) {
         app()
             .userComponent()!!
-            .plus(BiometricsDuplicatesDialogModule(requireContext(), teiType,program))
+            .plus(BiometricsDuplicatesDialogModule(requireContext(), teiType, program))
             .inject(this)
     }
 

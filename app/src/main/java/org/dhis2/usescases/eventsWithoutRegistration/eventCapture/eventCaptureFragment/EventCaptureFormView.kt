@@ -5,5 +5,9 @@ interface EventCaptureFormView {
     fun hideSaveButton()
     fun showSaveButton()
     fun onReopen()
-    fun verifyBiometrics(biometricsGuid: String?, teiOrgUnit: String?)
+    fun verifyBiometrics(
+        biometricsGuid: String?,
+        teiOrgUnit: String?,
+        trackedEntityInstanceId: String?
+    )
 }

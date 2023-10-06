@@ -7,6 +7,7 @@ import static org.dhis2.commons.Constants.ORG_UNIT;
 import static org.dhis2.commons.Constants.PERMANENT;
 import static org.dhis2.commons.Constants.PROGRAM_UID;
 import static org.dhis2.commons.Constants.TRACKED_ENTITY_INSTANCE;
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID;
 import static org.dhis2.utils.analytics.AnalyticsConstants.CLICK;
 import static org.dhis2.utils.analytics.AnalyticsConstants.CREATE_EVENT;
 import static org.dhis2.utils.analytics.AnalyticsConstants.DELETE_EVENT;
@@ -287,7 +288,7 @@ public class EventInitialActivity extends ActivityGlobalAbstract implements Even
         Intent intent = new Intent(this, EventCaptureActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT);
         intent.putExtras(EventCaptureActivity.getActivityBundleWithBiometrics(eventUid, programUid, isNew ? EventMode.NEW : EventMode.CHECK, biometricsGuid,
-        verificationStatus, teiOrgUnitUid));
+        verificationStatus, teiOrgUnitUid, getTrackedEntityInstance));
         startActivity(intent);
         finish();
     }

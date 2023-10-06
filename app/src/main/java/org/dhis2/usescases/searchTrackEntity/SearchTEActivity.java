@@ -34,6 +34,7 @@ import org.dhis2.commons.network.NetworkUtils;
 import org.dhis2.commons.orgunitselector.OUTreeFragment;
 import org.dhis2.commons.sync.SyncContext;
 import org.dhis2.commons.dialogs.DialogClickListener;
+import org.dhis2.data.biometrics.BiometricsClient;
 import org.dhis2.data.biometrics.BiometricsClientFactory;
 import org.dhis2.data.biometrics.IdentifyResult;
 import org.dhis2.data.biometrics.RegisterResult;
@@ -59,6 +60,7 @@ import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 
 import java.io.Serializable;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -403,7 +405,11 @@ public class SearchTEActivity extends ActivityGlobalAbstract implements SearchTE
     public void sendBiometricsConfirmIdentity(String sessionId, String guid, String teiUid,
             String enrollmentUid, boolean isOnline) {
         lastSelection = new LastSelection(teiUid, enrollmentUid, isOnline);
-        BiometricsClientFactory.INSTANCE.get(this).confirmIdentify(this, sessionId, guid);
+
+        HashMap extras = new HashMap<>();
+        extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, teiUid);
+
+        BiometricsClientFactory.INSTANCE.get(this).confirmIdentify(this, sessionId, guid, extras);
     }
 
     @Override

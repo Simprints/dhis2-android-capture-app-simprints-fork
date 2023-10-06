@@ -97,7 +97,7 @@ class BiometricsDuplicatesDialogPresenter(
             guid,
             teiUid,
             enrollmentUid,
-            isOnline
+            isOnline,
         )
     }
 
