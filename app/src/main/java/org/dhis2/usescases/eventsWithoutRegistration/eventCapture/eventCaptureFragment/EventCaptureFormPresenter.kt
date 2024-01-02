@@ -7,15 +7,14 @@ import org.dhis2.form.data.MissingMandatoryResult
 import org.dhis2.form.data.NotSavedResult
 import org.dhis2.form.data.SuccessfulResult
 import org.dhis2.form.model.FieldUiModel
-import org.dhis2.form.model.biometrics.BiometricsVerificationStatus
-import org.dhis2.form.model.biometrics.BiometricsVerificationUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsDataElementStatus
+import org.dhis2.form.model.biometrics.BiometricsDataElementUiModelImpl
+import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
+import org.dhis2.usescases.biometrics.isLastVerificationValid
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.EventCaptureContract
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.event.EventEditableStatus
 import org.jetbrains.annotations.Nullable
-
-import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
-import org.dhis2.usescases.biometrics.isLastVerificationValid
 
 class EventCaptureFormPresenter(
     private val view: EventCaptureFormView,
@@ -29,7 +28,7 @@ class EventCaptureFormPresenter(
     private var teiOrgUnit: String? = null
     private var trackedEntityInstanceId: String? = null
 
-    private var biometricsVerificationUiModel: BiometricsVerificationUiModelImpl? = null
+    private var biometricsVerificationUiModel: BiometricsDataElementUiModelImpl? = null
 
 
     fun handleDataIntegrityResult(result: DataIntegrityCheckResult) {
@@ -41,6 +40,7 @@ class EventCaptureFormPresenter(
                 result.mandatoryFields,
                 result.warningFields
             )
+
             is FieldsWithWarningResult -> activityPresenter.attemptFinish(
                 result.canComplete,
                 result.onCompleteMessage,
@@ -48,6 +48,7 @@ class EventCaptureFormPresenter(
                 emptyMap(),
                 result.fieldUidWarningList
             )
+
             is MissingMandatoryResult -> activityPresenter.attemptFinish(
                 result.canComplete,
                 result.onCompleteMessage,
@@ -55,6 +56,7 @@ class EventCaptureFormPresenter(
                 result.mandatoryFields,
                 result.warningFields
             )
+
             is SuccessfulResult -> activityPresenter.attemptFinish(
                 result.canComplete,
                 result.onCompleteMessage,
@@ -62,26 +64,35 @@ class EventCaptureFormPresenter(
                 emptyMap(),
                 emptyList()
             )
+
             NotSavedResult -> {
                 // Nothing to do in this case
             }
         }
     }
 
-    fun onFieldsLoading(fields: List<FieldUiModel>): List<FieldUiModel>  {
+    fun onFieldsLoading(fields: List<FieldUiModel>): List<FieldUiModel> {
         val updatedFields = updateBiometricsField(fields)
 
         if (BIOMETRICS_ENABLED) {
 
             biometricsVerificationUiModel = updatedFields.firstOrNull {
-                it is BiometricsVerificationUiModelImpl
-            }?.let { it as BiometricsVerificationUiModelImpl }
+                it is BiometricsDataElementUiModelImpl
+            }?.let { it as BiometricsDataElementUiModelImpl }
 
 
             biometricsVerificationUiModel?.setBiometricsRetryListener(
-                object : BiometricsVerificationUiModelImpl.BiometricsReTryOnClickListener {
+                object : BiometricsDataElementUiModelImpl.BiometricsReTryOnClickListener {
                     override fun onRetryClick() {
                         view.verifyBiometrics(biometricsGuid, teiOrgUnit, trackedEntityInstanceId)
+                    }
+                }
+            )
+
+            biometricsVerificationUiModel?.setBiometricsRegisterListener(
+                object : BiometricsDataElementUiModelImpl.BiometricsRegisterClickListener {
+                    override fun onClick() {
+                        view.registerBiometrics(teiOrgUnit, trackedEntityInstanceId)
                     }
                 }
             )
@@ -96,12 +107,12 @@ class EventCaptureFormPresenter(
 
     private fun updateBiometricsField(fields: List<FieldUiModel>?): MutableList<FieldUiModel> {
         return fields?.map {
-            if ( it is BiometricsVerificationUiModelImpl)
-             {
-                val biometricsUiModel = it as BiometricsVerificationUiModelImpl
+            if (it is BiometricsDataElementUiModelImpl) {
+                val biometricsUiModel = it as BiometricsDataElementUiModelImpl
                 val status = mapVerificationStatus(biometricsVerificationStatus)
-                 biometricsUiModel.setValue(biometricsGuid)
-                 biometricsUiModel.setStatus(status)
+                biometricsUiModel
+                    .setValue(biometricsGuid)
+                    .setStatus(status)
             } else {
                 it
             }
@@ -110,11 +121,11 @@ class EventCaptureFormPresenter(
 
     private fun launchBiometricsVerificationIfRequired(fields: List<FieldUiModel>) {
         biometricsVerificationUiModel = fields.firstOrNull {
-            it is BiometricsVerificationUiModelImpl
-        }?.let { it as BiometricsVerificationUiModelImpl }
+            it is BiometricsDataElementUiModelImpl
+        }?.let { it as BiometricsDataElementUiModelImpl }
 
         if (biometricsVerificationUiModel != null && this.biometricsGuid != null &&
-            biometricsVerificationUiModel!!.status == BiometricsVerificationStatus.NOT_DONE
+            biometricsVerificationUiModel!!.status == BiometricsDataElementStatus.NOT_DONE
         ) {
             val lastUpdated = activityPresenter.getBiometricsAttributeValueInTeiLastUpdated(
                 biometricsVerificationUiModel?.uid
@@ -126,9 +137,13 @@ class EventCaptureFormPresenter(
                     true
                 )
             ) {
-                view.verifyBiometrics(this.biometricsGuid, this.teiOrgUnit, this.trackedEntityInstanceId)
+                view.verifyBiometrics(
+                    this.biometricsGuid,
+                    this.teiOrgUnit,
+                    this.trackedEntityInstanceId
+                )
             } else {
-                refreshBiometricsVerificationStatus(1, false)
+                refreshBiometricsStatus(1, false)
             }
         }
     }
@@ -158,17 +173,18 @@ class EventCaptureFormPresenter(
         this.trackedEntityInstanceId = trackedEntityInstanceId
     }
 
-    fun refreshBiometricsVerificationStatus(
+    fun refreshBiometricsStatus(
         biometricsVerificationStatus: Int,
-        saveValue: Boolean = true
+        updateBiometricsGuidInAttribute: Boolean = true,
+        newBiometricsGuid: String? = null
     ) {
-        if (biometricsVerificationUiModel != null) {
-            biometricsVerificationUiModel?.onSave(biometricsGuid)
+        if (newBiometricsGuid != null){
+            biometricsGuid = newBiometricsGuid
         }
 
         val status = mapVerificationStatus(biometricsVerificationStatus)
 
-        if (status == BiometricsVerificationStatus.SUCCESS && saveValue) {
+        if (status == BiometricsDataElementStatus.SUCCESS && updateBiometricsGuidInAttribute) {
             activityPresenter.updateBiometricsAttributeValueInTei(biometricsGuid)
         }
 
@@ -177,11 +193,11 @@ class EventCaptureFormPresenter(
         view.onReopen()
     }
 
-    private fun mapVerificationStatus(biometricsVerificationStatus: Int): BiometricsVerificationStatus {
+    private fun mapVerificationStatus(biometricsVerificationStatus: Int): BiometricsDataElementStatus {
         return when (biometricsVerificationStatus) {
-            0 -> BiometricsVerificationStatus.FAILURE
-            1 -> BiometricsVerificationStatus.SUCCESS
-            else -> BiometricsVerificationStatus.NOT_DONE
+            0 -> BiometricsDataElementStatus.FAILURE
+            1 -> BiometricsDataElementStatus.SUCCESS
+            else -> BiometricsDataElementStatus.NOT_DONE
         }
     }
 }

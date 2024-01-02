@@ -55,6 +55,19 @@ class BiometricsClient(
         launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_ENROLL_REQUEST)
     }
 
+    fun registerFromFragment(fragment: Fragment, moduleId: String, extras: Map<String, String>) {
+        Timber.d("Biometrics register!")
+        Timber.d("moduleId: $moduleId")
+        printExtras(extras)
+
+        val intent = simHelper.register(moduleId)
+        extras.forEach { intent.putExtra(it.key, it.value) }
+
+        if (fragment.context != null) {
+            launchSimprintsAppFromFragment(fragment,intent,BIOMETRICS_ENROLL_REQUEST)
+        }
+    }
+
     fun identify(activity: Activity) {
         Timber.d("Biometrics identify!")
         Timber.d("moduleId: $defaultModuleId")

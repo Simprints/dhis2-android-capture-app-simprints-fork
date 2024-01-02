@@ -16,7 +16,7 @@ import org.dhis2.form.data.EnrollmentRepository
 
 import org.dhis2.form.model.FieldUiModel
 import org.dhis2.form.model.RowAction
-import org.dhis2.form.model.biometrics.BiometricsUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsAttributeUiModelImpl
 import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
 import org.dhis2.commons.biometrics.BIOMETRICS_FAILURE_PATTERN
 import org.dhis2.usescases.teiDashboard.TeiAttributesProvider
@@ -61,7 +61,7 @@ class EnrollmentPresenterImpl(
     private val backButtonProcessor: FlowableProcessor<Boolean> = PublishProcessor.create()
     private var hasShownIncidentDateEditionWarning = false
     private var hasShownEnrollmentDateEditionWarning = false
-    private var biometricsUiModel: BiometricsUiModelImpl? = null
+    private var biometricsUiModel: BiometricsAttributeUiModelImpl? = null
 
     fun init() {
         view.setSaveButtonVisible(false)
@@ -340,11 +340,11 @@ class EnrollmentPresenterImpl(
     fun onFieldsLoaded(fields: List<FieldUiModel>) {
         if (BIOMETRICS_ENABLED) {
             biometricsUiModel = fields.firstOrNull {
-                it is BiometricsUiModelImpl
-            }?.let { it as BiometricsUiModelImpl }
+                it is BiometricsAttributeUiModelImpl
+            }?.let { it as BiometricsAttributeUiModelImpl }
 
             biometricsUiModel?.setBiometricsRegisterListener(
-                object : BiometricsUiModelImpl.BiometricsOnRegisterClickListener {
+                object : BiometricsAttributeUiModelImpl.BiometricsOnRegisterClickListener {
                     override fun onClick() {
                         val orgUnit = enrollmentObjectRepository.get().blockingGet()
                             .organisationUnit()!!

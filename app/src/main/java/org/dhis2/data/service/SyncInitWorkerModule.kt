@@ -3,6 +3,7 @@ package org.dhis2.data.service
 import dagger.Module
 import dagger.Provides
 import org.dhis2.commons.di.dagger.PerService
+import org.dhis2.commons.prefs.BasicPreferenceProvider
 import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.data.biometrics.BiometricsConfigApi
 import org.dhis2.data.biometrics.BiometricsConfigRepositoryImpl
@@ -23,12 +24,12 @@ class SyncInitWorkerModule {
     @PerService
     fun biometricsConfigRepository(
         d2: D2,
-        preferences: PreferenceProvider?
+        basicPreferences: BasicPreferenceProvider
     ): BiometricsConfigRepository {
         val biometricsConfigApi = d2.retrofit().create(
             BiometricsConfigApi::class.java
         )
-        return BiometricsConfigRepositoryImpl(d2, preferences!!, biometricsConfigApi)
+        return BiometricsConfigRepositoryImpl(d2, basicPreferences, biometricsConfigApi)
     }
 
     @Provides

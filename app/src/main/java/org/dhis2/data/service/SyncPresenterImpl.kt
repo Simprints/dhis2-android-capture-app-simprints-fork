@@ -24,6 +24,7 @@ import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.data.service.workManager.WorkManagerController
 import org.dhis2.data.service.workManager.WorkerItem
 import org.dhis2.data.service.workManager.WorkerType
+import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
 import org.dhis2.usescases.biometrics.BiometricsConfigRepository
 
 import org.dhis2.utils.DateUtils
@@ -210,7 +211,10 @@ class SyncPresenterImpl(
                 .doOnComplete {
                     updateProyectAnalytics()
                     setUpSMS()
-                    downloadBiometricsConfig()
+
+                    if (BIOMETRICS_ENABLED) {
+                        downloadBiometricsConfig()
+                    }
                 }
 
         ).andThen(

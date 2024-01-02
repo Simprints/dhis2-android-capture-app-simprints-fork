@@ -14,10 +14,13 @@ import java.util.concurrent.TimeUnit
 import org.dhis2.commons.R
 import org.dhis2.commons.filters.FilterManager
 import org.dhis2.commons.matomo.MatomoAnalyticsController
+import org.dhis2.data.biometrics.BiometricsConfigRepositoryImpl
 import org.dhis2.data.schedulers.TestSchedulerProvider
 import org.dhis2.data.service.SyncStatusController
 import org.dhis2.data.service.SyncStatusData
 import org.dhis2.ui.MetadataIconData
+import org.dhis2.usescases.biometrics.BiometricsConfigRepository
+import org.dhis2.usescases.biometrics.SelectBiometricsConfig
 import org.hisp.dhis.android.core.common.State
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -35,6 +38,7 @@ class ProgramPresenterTest {
     private val syncStatusController: SyncStatusController = mock()
     private val identifyProgramType: IdentifyProgramType = mock()
     private val stockManagementMapper: StockManagementMapper = mock()
+    private val biometricsConfigRepository: BiometricsConfigRepository = mock()
 
     @Before
     fun setUp() {
@@ -46,7 +50,8 @@ class ProgramPresenterTest {
             matomoAnalyticsController,
             syncStatusController,
             identifyProgramType,
-            stockManagementMapper
+            stockManagementMapper,
+            SelectBiometricsConfig(biometricsConfigRepository)
         )
     }
 

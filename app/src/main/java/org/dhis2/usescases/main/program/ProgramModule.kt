@@ -6,11 +6,16 @@ import org.dhis2.commons.di.dagger.PerFragment
 import org.dhis2.commons.filters.FilterManager
 import org.dhis2.commons.filters.data.FilterPresenter
 import org.dhis2.commons.matomo.MatomoAnalyticsController
+import org.dhis2.commons.prefs.BasicPreferenceProvider
 import org.dhis2.commons.resources.ResourceManager
 import org.dhis2.commons.schedulers.SchedulerProvider
+import org.dhis2.data.biometrics.BiometricsConfigApi
+import org.dhis2.data.biometrics.BiometricsConfigRepositoryImpl
+import org.dhis2.usescases.biometrics.SelectBiometricsConfig
 import org.dhis2.data.dhislogic.DhisProgramUtils
 import org.dhis2.data.dhislogic.DhisTrackedEntityInstanceUtils
 import org.dhis2.data.service.SyncStatusController
+import org.dhis2.usescases.biometrics.BiometricsConfigRepository
 import org.hisp.dhis.android.core.D2
 
 @Module
@@ -25,7 +30,8 @@ class ProgramModule(private val view: ProgramView) {
         matomoAnalyticsController: MatomoAnalyticsController,
         syncStatusController: SyncStatusController,
         identifyProgramType: IdentifyProgramType,
-        stockManagementMapper: StockManagementMapper
+        stockManagementMapper: StockManagementMapper,
+        selectBiometricsConfig: SelectBiometricsConfig
     ): ProgramPresenter {
         return ProgramPresenter(
             view,
@@ -35,7 +41,8 @@ class ProgramModule(private val view: ProgramView) {
             matomoAnalyticsController,
             syncStatusController,
             identifyProgramType,
-            stockManagementMapper
+            stockManagementMapper,
+            selectBiometricsConfig
         )
     }
 
@@ -84,5 +91,25 @@ class ProgramModule(private val view: ProgramView) {
     @PerFragment
     internal fun provideProgramThemeRepository(d2: D2): ProgramThemeRepository {
         return ProgramThemeRepository(d2)
+    }
+
+    @Provides
+    @PerFragment
+    fun biometricsConfigRepository(
+        d2: D2,
+        basicPreferences: BasicPreferenceProvider
+    ): BiometricsConfigRepository {
+        val biometricsConfigApi = d2.retrofit().create(
+            BiometricsConfigApi::class.java
+        )
+        return BiometricsConfigRepositoryImpl(d2, basicPreferences, biometricsConfigApi)
+    }
+
+    @Provides
+    @PerFragment
+    fun selectBiometricsConfig(
+        biometricsConfigRepository:BiometricsConfigRepository
+    ): SelectBiometricsConfig {
+        return SelectBiometricsConfig(biometricsConfigRepository)
     }
 }

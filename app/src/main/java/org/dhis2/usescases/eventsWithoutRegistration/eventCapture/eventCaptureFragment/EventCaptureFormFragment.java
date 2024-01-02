@@ -1,5 +1,6 @@
 package org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFragment;
 
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_ENROLL_REQUEST;
 import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_TRACKED_ENTITY_INSTANCE_ID;
 import static org.dhis2.commons.extensions.ViewExtensionsKt.closeKeyboard;
 import static org.dhis2.utils.granularsync.SyncStatusDialogNavigatorKt.OPEN_ERROR_LOCATION;
@@ -28,6 +29,7 @@ import org.dhis2.R;
 import org.dhis2.commons.Constants;
 import org.dhis2.data.biometrics.BiometricsClient;
 import org.dhis2.data.biometrics.BiometricsClientFactory;
+import org.dhis2.data.biometrics.RegisterResult;
 import org.dhis2.data.biometrics.VerifyResult;
 import org.dhis2.databinding.SectionSelectorFragmentBinding;
 import org.dhis2.form.model.EventRecords;
@@ -174,21 +176,41 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         switch (requestCode) {
-            case BIOMETRICS_VERIFY_REQUEST:
+            case BIOMETRICS_VERIFY_REQUEST: {
                 if (resultCode == RESULT_OK) {
                     VerifyResult result = BiometricsClientFactory.INSTANCE.get(
                             this.getContext()).handleVerifyResponse(data);
 
 
-                   if (result instanceof VerifyResult.Match) {
-                        presenter.refreshBiometricsVerificationStatus(1,true);
+                    if (result instanceof VerifyResult.Match) {
+                        presenter.refreshBiometricsStatus(1, true, null);
                     } else if (result instanceof VerifyResult.NoMatch) {
-                        presenter.refreshBiometricsVerificationStatus(0,true);
+                        presenter.refreshBiometricsStatus(0, true,null);
                     } else if (result instanceof VerifyResult.Failure) {
-                        presenter.refreshBiometricsVerificationStatus(0,true);
+                        presenter.refreshBiometricsStatus(0, true,null);
                     }
                 }
                 break;
+            }
+            case BIOMETRICS_ENROLL_REQUEST: {
+                if (data != null) {
+                    RegisterResult result = BiometricsClientFactory.INSTANCE.get(
+                            this.getContext()).handleRegisterResponse(data);
+
+
+                    if (result instanceof RegisterResult.Completed) {
+                        presenter.refreshBiometricsStatus(1, true,((RegisterResult.Completed) result).getGuid());
+                    } else if (result instanceof RegisterResult.Failure) {
+                        presenter.refreshBiometricsStatus(0, true, null);
+                    } else if (result instanceof RegisterResult.PossibleDuplicates) {
+                   /*     presenter.onBiometricsPossibleDuplicates(
+                                result.guids,
+                                result.sessionId
+                        )*/
+                    }
+                }
+            }
+
         }
         super.onActivityResult(requestCode, resultCode, data);
     }
@@ -231,5 +253,13 @@ public class EventCaptureFormFragment extends FragmentGlobalAbstract implements 
         extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
 
         BiometricsClientFactory.INSTANCE.get(this.getContext()).verify(this, biometricsGuid, teiOrgUnit, extras);
+    }
+
+    @Override
+    public void registerBiometrics(@Nullable String teiOrgUnit, @Nullable String trackedEntityInstanceId) {
+        HashMap extras = new HashMap<>();
+        extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
+
+        BiometricsClientFactory.INSTANCE.get(this.getContext()).registerFromFragment(this, teiOrgUnit, extras);
     }
 }

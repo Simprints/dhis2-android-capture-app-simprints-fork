@@ -100,7 +100,7 @@ ext.versions = [
         sdk                           : 33,
         minSdk                        : 21,
         vCode                         : 128,
-        vName                         : "2.8.1.1-simprints-fork-2",
+        vName                         : "2.8.1.1-simprints-fork-3",
         sourceCompat                  : JavaVersion.VERSION_11,
         targetCompat                  : JavaVersion.VERSION_11,
         kotlinCompilerExtensionVersion: "1.4.2",

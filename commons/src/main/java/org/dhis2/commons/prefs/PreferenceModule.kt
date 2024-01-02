@@ -13,4 +13,10 @@ open class PreferenceModule {
     open fun preferenceProvider(context: Context): PreferenceProvider {
         return PreferenceProviderImpl(context)
     }
+
+    @Provides
+    @Singleton
+    open fun basicPreferenceProvider(context: Context): BasicPreferenceProvider {
+        return BasicPreferenceProviderImpl(context)
+    }
 }

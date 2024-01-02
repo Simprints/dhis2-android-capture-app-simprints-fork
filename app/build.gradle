@@ -178,7 +178,7 @@ android {
             applicationId "org.simprints.dhis2"
             dimension "default"
             versionCode versions.vCode
-            versionName "2.8.1.1-simprints-fork-2"
+            versionName "2.8.1.1-simprints-fork-3"
         }
     }
 

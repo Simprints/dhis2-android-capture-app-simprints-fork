@@ -8,13 +8,17 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.databinding.ViewDataBinding
 import org.dhis2.form.R
 import org.dhis2.form.model.FieldUiModel
-import org.dhis2.form.model.biometrics.BiometricsVerificationStatus
-import org.dhis2.form.model.biometrics.BiometricsVerificationUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsDataElementStatus
+import org.dhis2.form.model.biometrics.BiometricsDataElementUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsRegistrationUIModel
 import org.dhis2.form.ui.FormViewHolder
 import org.dhis2.form.ui.event.RecyclerViewUiEvents
 import org.dhis2.form.ui.intent.FormIntent
 
-class BiometricsVerificationViewHolder(private val binding: ViewDataBinding) : FormViewHolder(binding) {
+class BiometricsDataElementViewHolder(private val binding: ViewDataBinding) : FormViewHolder(binding) {
+    private val verificationContainer:LinearLayout = binding.root.findViewById(R.id.verification_container)
+    private val registrationContainer:LinearLayout = binding.root.findViewById(R.id.registration_container)
+
     private val tryAgainButton:LinearLayout = binding.root.findViewById(R.id.tryAgainButton)
     private val statusImageView:ImageView = binding.root.findViewById(R.id.statusImageView)
 
@@ -39,18 +43,30 @@ class BiometricsVerificationViewHolder(private val binding: ViewDataBinding) : F
         }
         uiModel.setCallback(itemCallback)
 
+        val uiVerificationUiModel = (uiModel as BiometricsDataElementUiModelImpl)
 
+        if (!uiVerificationUiModel.value.isNullOrEmpty()){
+            renderVerification(uiVerificationUiModel)
+        } else {
+            renderRegistration(uiVerificationUiModel)
+        }
+    }
+
+    private fun renderVerification(uiModel : BiometricsDataElementUiModelImpl){
         tryAgainButton.setOnClickListener {
-            (uiModel as BiometricsVerificationUiModelImpl).onRetryVerificationClick()
+            uiModel.onRetryVerificationClick()
         }
 
-        when ((uiModel as BiometricsVerificationUiModelImpl).status) {
-            BiometricsVerificationStatus.SUCCESS -> {
+        verificationContainer.visibility = VISIBLE
+        registrationContainer.visibility = GONE
+
+        when (uiModel.status) {
+            BiometricsDataElementStatus.SUCCESS -> {
                 statusImageView.visibility = VISIBLE
                 statusImageView.setImageDrawable(AppCompatResources.getDrawable(binding.root.context, R.drawable.ic_bio_available_yes));
                 tryAgainButton.visibility = GONE
             }
-            BiometricsVerificationStatus.FAILURE -> {
+            BiometricsDataElementStatus.FAILURE -> {
                 statusImageView.visibility = VISIBLE
                 statusImageView.setImageDrawable(AppCompatResources.getDrawable(binding.root.context, R.drawable.ic_bio_available_no));
                 tryAgainButton.visibility = VISIBLE
@@ -58,6 +74,26 @@ class BiometricsVerificationViewHolder(private val binding: ViewDataBinding) : F
             else -> {
                 statusImageView.visibility = GONE
                 tryAgainButton.visibility = GONE
+            }
+        }
+    }
+
+    private fun renderRegistration(uiModel : BiometricsDataElementUiModelImpl){
+        verificationContainer.visibility = GONE
+        registrationContainer.visibility = VISIBLE
+
+        val renderer = BiometricsRegisterRenderer(binding, uiModel as BiometricsRegistrationUIModel)
+
+
+        when (uiModel.status) {
+            BiometricsDataElementStatus.SUCCESS -> {
+                renderer.onSuccess()
+            }
+            BiometricsDataElementStatus.FAILURE -> {
+                renderer.onFailure()
+            }
+            else -> {
+                renderer.onInitial()
             }
         }
     }

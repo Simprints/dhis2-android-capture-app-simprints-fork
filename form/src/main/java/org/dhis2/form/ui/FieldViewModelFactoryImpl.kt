@@ -6,9 +6,9 @@ import org.dhis2.form.model.FieldUiModel
 import org.dhis2.form.model.FieldUiModelImpl
 import org.dhis2.form.model.OptionSetConfiguration
 import org.dhis2.form.model.SectionUiModelImpl
-import org.dhis2.form.model.biometrics.BiometricsUiModelImpl
-import org.dhis2.form.model.biometrics.BiometricsVerificationStatus
-import org.dhis2.form.model.biometrics.BiometricsVerificationUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsAttributeUiModelImpl
+import org.dhis2.form.model.biometrics.BiometricsDataElementStatus
+import org.dhis2.form.model.biometrics.BiometricsDataElementUiModelImpl
 import org.dhis2.form.ui.event.UiEventFactoryImpl
 import org.dhis2.form.ui.provider.DisplayNameProvider
 import org.dhis2.form.ui.provider.HintProvider
@@ -249,7 +249,7 @@ class FieldViewModelFactoryImpl(
         value: String,
         programStageSection: String?
     ): FieldUiModel {
-        return BiometricsUiModelImpl(
+        return BiometricsAttributeUiModelImpl(
             id,
             layoutProvider.getLayoutForBiometrics(),
             value,
@@ -262,12 +262,12 @@ class FieldViewModelFactoryImpl(
         value: String,
         programStageSection: String?
     ): FieldUiModel {
-        return BiometricsVerificationUiModelImpl(
+        return BiometricsDataElementUiModelImpl(
             id,
             layoutProvider.getLayoutForBiometricsVerification(),
             value,
             programStageSection,
-            BiometricsVerificationStatus.NOT_DONE
+            BiometricsDataElementStatus.NOT_DONE
         )
     }
 }

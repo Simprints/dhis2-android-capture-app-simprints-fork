@@ -2,7 +2,6 @@ package org.dhis2.form.ui
 
 import org.dhis2.form.model.FieldUiModel
 import org.dhis2.form.model.OptionSetConfiguration
-import org.dhis2.form.model.biometrics.BiometricsVerificationStatus
 import org.hisp.dhis.android.core.common.FeatureType
 import org.hisp.dhis.android.core.common.ObjectStyle
 import org.hisp.dhis.android.core.common.ValueType

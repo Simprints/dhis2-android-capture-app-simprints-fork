@@ -10,7 +10,9 @@ import org.dhis2.commons.matomo.Categories.Companion.HOME
 import org.dhis2.commons.matomo.Labels.Companion.CLICK_ON
 import org.dhis2.commons.matomo.MatomoAnalyticsController
 import org.dhis2.commons.schedulers.SchedulerProvider
+import org.dhis2.usescases.biometrics.SelectBiometricsConfig
 import org.dhis2.data.service.SyncStatusController
+import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit
 import org.hisp.dhis.android.core.program.ProgramType
 import timber.log.Timber
@@ -23,7 +25,8 @@ class ProgramPresenter internal constructor(
     private val matomoAnalyticsController: MatomoAnalyticsController,
     private val syncStatusController: SyncStatusController,
     private val identifyProgramType: IdentifyProgramType,
-    private val stockManagementMapper: StockManagementMapper
+    private val stockManagementMapper: StockManagementMapper,
+    private val selectBiometricsConfig: SelectBiometricsConfig
 ) {
 
     private val programs = MutableLiveData<List<ProgramViewModel>>(emptyList())
@@ -101,6 +104,10 @@ class ProgramPresenter internal constructor(
                 view.navigateToStockManagement(stockManagementMapper.map(programModel))
             else ->
                 view.navigateTo(programModel)
+        }
+
+        if (BIOMETRICS_ENABLED) {
+            selectBiometricsConfig(programModel.uid)
         }
     }
 

@@ -10,4 +10,9 @@ interface EventCaptureFormView {
         teiOrgUnit: String?,
         trackedEntityInstanceId: String?
     )
+
+    fun registerBiometrics(
+        teiOrgUnit: String?,
+        trackedEntityInstanceId: String?
+    )
 }

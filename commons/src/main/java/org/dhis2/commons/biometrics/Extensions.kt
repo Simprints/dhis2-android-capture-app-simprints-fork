@@ -2,7 +2,7 @@ package org.dhis2.commons.biometrics
 
 import android.content.Context
 import org.dhis2.commons.R
-import org.dhis2.commons.prefs.PreferenceProviderImpl
+import org.dhis2.commons.prefs.BasicPreferenceProviderImpl
 
 import org.hisp.dhis.android.core.program.ProgramTrackedEntityAttribute
 
@@ -51,7 +51,7 @@ fun Context.getBioIconNoneOfTheAbove() =
     else R.drawable.ic_bio_face_warning_red
 
 private fun getBioIcon(context: Context): BiometricsIcon {
-    val preferences = PreferenceProviderImpl(context)
+    val preferences = BasicPreferenceProviderImpl(context)
 
     val iconText = preferences.getString(
         BiometricsPreference.ICON,

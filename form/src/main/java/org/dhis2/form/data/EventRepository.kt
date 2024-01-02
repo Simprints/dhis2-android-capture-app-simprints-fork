@@ -6,10 +6,8 @@ import io.reactivex.Single
 import org.dhis2.commons.bindings.blockingGetValueCheck
 import org.dhis2.commons.bindings.userFriendlyValue
 import org.dhis2.commons.biometrics.isBiometricsVerificationText
-import org.dhis2.form.extensions.isBiometricText
 import org.dhis2.form.model.FieldUiModel
 import org.dhis2.form.model.OptionSetConfiguration
-import org.dhis2.form.model.biometrics.BiometricsVerificationStatus
 import org.dhis2.form.ui.FieldViewModelFactory
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.repositories.scope.RepositoryScope
