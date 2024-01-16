@@ -9,8 +9,6 @@
     <string name="error_wrong_credentials">អត្ដសញ្ញាណមិនត្រឹមត្រូវ</string>
     <string name="error_unexpected_error">កំហុសបច្ចេកទេសមិនបានរំពឹងទុក</string>
     <string name="error_internal_server_error">ម៉ាស៊ីនមេខាងក្នុងមានបញ្ហាបច្ចេកទេស</string>
-    <string name="yes">យល់ព្រម</string>
-    <string name="no">មិនព្រម</string>
     <string name="no_value">មិនមានតំលៃ</string>
     <!-- SyncService strings: -->
     <string name="sync_now">បញ្ជូនទិន្នន័យឥឡូវនេះ</string>
@@ -46,7 +44,6 @@
     <string name="configuration_sync_failed">ការបញ្ជូនការកំណត់​រចនាសម្ព័ន្ធរបស់អ្នកបរាជ័យ</string>
     <string name="data_sync_failed">ការបញ្ជូនទិន្នន័យបរាជ័យ</string>
     <string name="account_recovery">ស្តារគណនីឡើងវិញ</string>
-
     <!--PERIOD-->
     <string name="DAILY">រាល់​ថ្ងៃ</string>
     <string name="WEEKLY">រាល់​សប្ដាហ៍</string>
@@ -80,7 +77,6 @@
     <string name="event_approved">ព្រឹត្តិការណ៏បានអនុម័ត</string>
     <string name="event_inactive">ព្រឹត្តិការណ៏មិនដំណើរការ</string>
     <string name="read_only">បានត្រឹមតែអាន</string>
-    <string name="complete">បញ្ចប់</string>
     <string name="completed">បានបញ្ចប់</string>
     <string name="cancelled">បានលុបចោល</string>
     <string name="re_open">បើកឡើងវិញ</string>
@@ -143,9 +139,6 @@
     <string name="log_out">ចាកចេញ</string>
     <string name="block_session">ការទប់ស្កាត់</string>
 
-    <!--MAP SELECTION-->
-    <string name="select_location">ជ្រើសរើសទីតាំង</string>
-
     <!-- SYNC -->
     <string name="a_minute">១នាទី</string>
     <string name="fifteen_minute">១៥នាទី</string>
@@ -183,7 +176,6 @@
     <string name="enroll_in">ចុះឈ្មោះក្នុង %s</string>
     <string name="missing_mandatory_fields_title">ទិន្នន័យចាំបាច់មិនមាន</string>
     <string name="missing_mandatory_fields_text">ឈ្មោះទិន្នន័យចាំបាច់ខ្លះមិនមាន, ប្រសិនបើអ្នកចង់ត្រឡប់ទៅវិញ រាល់ពត៏មាននិងត្រូវលុយចោល</string>
-    <string name="missing_mandatory_fields_events">ឈ្មោះទិន្នន័យចាំបាច់ខ្លះមិនមាន។ អ្នកអាចត្រឡប់ក្រោយបាន ប៉ុន្ដែព្រឹត្តិការណ៏នេះនិងមិនបានសំរេច</string>
     <string name="missing_mandatory_fields_go_back">លុប ហើយត្រឡប់ទៅវិញ</string>
     <!--EVENT SUMMARY-->
     <string name="section_list">បញ្ជីតាមផ្នែក</string>

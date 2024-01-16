@@ -1,12 +1,12 @@
 package org.dhis2.commons.filters.data
 
+import javax.inject.Inject
 import org.dhis2.commons.filters.FilterManager
 import org.dhis2.commons.filters.Filters
 import org.hisp.dhis.android.core.arch.repositories.scope.RepositoryScope
 import org.hisp.dhis.android.core.common.State
 import org.hisp.dhis.android.core.event.search.EventQueryCollectionRepository
 import org.hisp.dhis.android.core.program.Program
-import javax.inject.Inject
 
 class EventProgramFilterSearchHelper @Inject constructor(
     private val filterRepository: FilterRepository,
@@ -18,8 +18,8 @@ class EventProgramFilterSearchHelper @Inject constructor(
         textFilter: TextFilter?
     ): EventQueryCollectionRepository {
         return applyFiltersTo(
-            if(textFilter != null){
-                filterRepository.eventsByProgramAndTextFilter(program.uid(),textFilter)
+            if (textFilter != null) {
+                filterRepository.eventsByProgramAndTextFilter(program.uid(), textFilter)
             } else {
                 filterRepository.eventsByProgram(program.uid())
             }
@@ -147,10 +147,12 @@ class EventProgramFilterSearchHelper @Inject constructor(
                         repository,
                         orderDirection
                     )
+
                     Filters.ORG_UNIT -> filterRepository.sortByOrgUnit(
                         repository,
                         orderDirection
                     )
+
                     else -> repository
                 }
             } ?: repository

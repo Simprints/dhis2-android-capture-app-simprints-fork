@@ -2,10 +2,9 @@ plugins {
     id 'com.android.library'
     id 'kotlin-android'
     id 'kotlin-kapt'
+    id 'com.autonomousapps.dependency-analysis' version "1.19.0"
 }
-
-def libraries = rootProject.ext.libraries
-def versions = rootProject.ext.versions
+apply from: "$project.rootDir/jacoco/jacoco.gradle"
 
 repositories {
     maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
@@ -13,13 +12,13 @@ repositories {
 
 android {
     compileSdkVersion versions.sdk
-    buildToolsVersion versions.tools
+    namespace "org.dhis2.form"
 
     defaultConfig {
         minSdkVersion versions.minSdk
         targetSdkVersion versions.sdk
-        versionCode 1
-        versionName "1.0"
+        versionCode versions.vCode
+        versionName versions.vName
 
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -27,7 +26,7 @@ android {
     }
 
     buildTypes {
-        debug{
+        debug {
 
         }
         release {
@@ -39,16 +38,22 @@ android {
     flavorDimensions "default"
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility versions.sourceCompat
+        targetCompatibility versions.targetCompat
     }
 
     buildFeatures {
+        compose true
+
         dataBinding true
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = versions.targetCompat
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = versions.kotlinCompilerExtensionVersion
     }
 }
 
@@ -56,32 +61,15 @@ dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
 
     implementation project(":commons")
+    implementation project(":dhis2_android_maps")
 
-    debugImplementation project(':core')
-    releaseImplementation project(':core')
-
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-
-    implementation "com.google.android.material:material:${libraries.material}"
-    implementation "androidx.core:core-ktx:${libraries.corektx}"
-    implementation "androidx.appcompat:appcompat:${libraries.appcompat}"
-    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:${libraries.lifecycleviewmodel}"
-    implementation 'androidx.test.espresso:espresso-idling-resource:3.3.0'
-    implementation 'androidx.test.espresso.idling:idling-concurrent:3.3.0'
-
-    //Timber
-    implementation "com.jakewharton.timber:timber:${libraries.timber}"
-
-    //region Test
-    testImplementation "junit:junit:${libraries.junit}"
-    testImplementation 'org.mockito:mockito-core:3.4.6'
-    testImplementation 'org.mockito:mockito-inline:2.13.0'
-    testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
-    testImplementation 'app.cash.turbine:turbine:0.3.0'
-    testImplementation "androidx.test:core:1.3.0"
-    testImplementation 'androidx.test:rules:1.3.0'
-    testImplementation 'androidx.arch.core:core-testing:2.1.0'
-    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.4.3'
-
-    //endregion
+    testImplementation libs.test.mockitoCore
+    testImplementation libs.test.mockitoInline
+    testImplementation libs.test.mockitoKotlin
+    testImplementation libs.test.turbine
+    testImplementation libs.test.testCore
+    testImplementation libs.test.testRules
+    testImplementation libs.test.archCoreTesting
+    testImplementation libs.test.kotlinCoroutines
+    androidTestImplementation libs.test.espressoIdlingResources
 }

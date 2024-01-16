@@ -14,6 +14,7 @@ import org.dhis2.usescases.jira.JiraFragment
 import org.dhis2.usescases.main.program.ProgramFragment
 import org.dhis2.usescases.qrReader.QrReaderFragment
 import org.dhis2.usescases.settings.SyncManagerFragment
+import org.dhis2.usescases.troubleshooting.TroubleshootingFragment
 import org.dhis2.utils.customviews.navigationbar.NavigationBottomBar
 
 class MainNavigator(
@@ -30,6 +31,7 @@ class MainNavigator(
         VISUALIZATIONS(R.string.done_task, R.id.menu_home),
         QR(R.string.QR_SCANNER, R.id.qr_scan),
         SETTINGS(R.string.SYNC_MANAGER, R.id.sync_manager),
+        TROUBLESHOOTING(R.string.main_menu_troubleshooting, R.id.menu_troubleshooting),
         JIRA(R.string.jira_report, R.id.menu_jira),
         ABOUT(R.string.about, R.id.menu_about)
     }
@@ -39,11 +41,9 @@ class MainNavigator(
 
     fun isHome(): Boolean = isPrograms() || isVisualizations()
 
-    fun isPrograms(): Boolean =
-        currentScreen == MainScreen.PROGRAMS
+    fun isPrograms(): Boolean = currentScreen == MainScreen.PROGRAMS
 
-    fun isVisualizations(): Boolean =
-        currentScreen == MainScreen.VISUALIZATIONS
+    fun isVisualizations(): Boolean = currentScreen == MainScreen.VISUALIZATIONS
 
     fun getCurrentIfProgram(): ProgramFragment? {
         return currentFragment?.takeIf { it is ProgramFragment } as ProgramFragment
@@ -73,11 +73,13 @@ class MainNavigator(
             programFragment.sharedElementReturnTransition = ChangeBounds()
         }
         beginTransaction(
-            ProgramFragment(), MainScreen.PROGRAMS, sharedView
+            ProgramFragment(),
+            MainScreen.PROGRAMS,
+            sharedView
         )
     }
 
-    fun restoreScreen(screenToRestoreName: String) {
+    fun restoreScreen(screenToRestoreName: String, languageSelectorOpened: Boolean = false) {
         when (MainScreen.valueOf(screenToRestoreName)) {
             MainScreen.PROGRAMS -> openPrograms()
             MainScreen.VISUALIZATIONS -> openVisualizations()
@@ -85,6 +87,7 @@ class MainNavigator(
             MainScreen.SETTINGS -> openSettings()
             MainScreen.JIRA -> openJira()
             MainScreen.ABOUT -> openAbout()
+            MainScreen.TROUBLESHOOTING -> openTroubleShooting(languageSelectorOpened)
         }
     }
 
@@ -100,35 +103,54 @@ class MainNavigator(
             visualizationFragment.sharedElementReturnTransition = ChangeBounds()
         }
         beginTransaction(
-            visualizationFragment, MainScreen.VISUALIZATIONS, sharedView
+            visualizationFragment,
+            MainScreen.VISUALIZATIONS,
+            sharedView
         )
     }
 
     fun openSettings() {
         beginTransaction(
-            SyncManagerFragment(), MainScreen.SETTINGS
+            SyncManagerFragment(),
+            MainScreen.SETTINGS
         )
     }
 
     fun openQR() {
         beginTransaction(
-            QrReaderFragment(), MainScreen.QR
+            QrReaderFragment(),
+            MainScreen.QR
         )
     }
 
     fun openJira() {
         beginTransaction(
-            JiraFragment(), MainScreen.JIRA
+            JiraFragment(),
+            MainScreen.JIRA
         )
     }
 
     fun openAbout() {
         beginTransaction(
-            AboutFragment(), MainScreen.ABOUT
+            AboutFragment(),
+            MainScreen.ABOUT
         )
     }
 
-    private fun beginTransaction(fragment: Fragment, screen: MainScreen, sharedView: View? = null) {
+    fun openTroubleShooting(languageSelectorOpened: Boolean = false) {
+        beginTransaction(
+            fragment = TroubleshootingFragment.instance(languageSelectorOpened),
+            screen = MainScreen.TROUBLESHOOTING,
+            useFadeInTransition = languageSelectorOpened
+        )
+    }
+
+    private fun beginTransaction(
+        fragment: Fragment,
+        screen: MainScreen,
+        sharedView: View? = null,
+        useFadeInTransition: Boolean = false
+    ) {
         if (currentScreen != screen) {
             onTransitionStart()
             currentScreen = screen
@@ -136,11 +158,21 @@ class MainNavigator(
             val transaction: FragmentTransaction = fragmentManager.beginTransaction()
             transaction.apply {
                 if (sharedView == null) {
+                    val (enterAnimation, exitAnimation) = if (useFadeInTransition) {
+                        Pair(android.R.anim.fade_in, android.R.anim.fade_out)
+                    } else {
+                        Pair(R.anim.fragment_enter_right, R.anim.fragment_exit_left)
+                    }
+                    val (enterPopAnimation, exitPopAnimation) = if (useFadeInTransition) {
+                        Pair(android.R.anim.fade_in, android.R.anim.fade_out)
+                    } else {
+                        Pair(R.anim.fragment_enter_left, R.anim.fragment_exit_right)
+                    }
                     setCustomAnimations(
-                        R.anim.fragment_enter_right,
-                        R.anim.fragment_exit_left,
-                        R.anim.fragment_enter_left,
-                        R.anim.fragment_exit_right
+                        enterAnimation,
+                        exitAnimation,
+                        enterPopAnimation,
+                        exitPopAnimation
                     )
                 } else {
                     setReorderingAllowed(true)

@@ -12,13 +12,12 @@ import io.reactivex.Flowable
 import io.reactivex.Observable
 import io.reactivex.Single
 import org.dhis2.commons.filters.FilterManager
+import org.dhis2.commons.matomo.MatomoAnalyticsController
 import org.dhis2.commons.prefs.Preference.Companion.GROUPING
 import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.data.schedulers.TrampolineSchedulerProvider
 import org.dhis2.utils.AuthorityException
-import org.dhis2.utils.Constants.PROGRAM_THEME
-import org.dhis2.utils.Constants.THEME
 import org.dhis2.utils.analytics.AnalyticsHelper
 import org.dhis2.utils.analytics.CLICK
 import org.dhis2.utils.analytics.DELETE_ENROLL
@@ -47,6 +46,7 @@ class TeiDashboardPresenterTest {
     private val programUid = "programUid"
     private val teiUid = "teiUid"
     private val enrollmentUid = "enrollmentUid"
+    private val matomoAnalyticsController: MatomoAnalyticsController = mock()
 
     @Before
     fun setup() {
@@ -59,7 +59,8 @@ class TeiDashboardPresenterTest {
             schedulers,
             analyticsHelper,
             preferenceProvider,
-            filterManager
+            filterManager,
+            matomoAnalyticsController
         )
     }
 
@@ -210,7 +211,14 @@ class TeiDashboardPresenterTest {
     fun `Should not deleteEnrollment if it doesn't has permission`() {
         val currentEnrollment = Enrollment.builder().uid("enrollmentUid").build()
         val dashboardProgramModel = DashboardProgramModel(
-            null, currentEnrollment, null, null, null, null, null, null
+            null,
+            currentEnrollment,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
         )
         presenter.dashboardProgramModel = dashboardProgramModel
         whenever(
@@ -225,7 +233,14 @@ class TeiDashboardPresenterTest {
     fun `Should deleteEnrollment if it has permission`() {
         val currentEnrollment = Enrollment.builder().uid("enrollmentUid").build()
         val dashboardProgramModel = DashboardProgramModel(
-            null, currentEnrollment, null, null, null, null, null, null
+            null,
+            currentEnrollment,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
         )
         presenter.dashboardProgramModel = dashboardProgramModel
         whenever(
@@ -280,32 +295,6 @@ class TeiDashboardPresenterTest {
         val uid = presenter.programUid
 
         assert(uid == programUid)
-    }
-
-    @Test
-    fun `Should the program theme from preferences`() {
-        val theme = 1
-        val programTheme = 2
-        whenever(preferenceProvider.getInt(THEME, 1)) doReturn theme
-        whenever(preferenceProvider.getInt(PROGRAM_THEME, theme)) doReturn programTheme
-
-        val savedTheme = presenter.getProgramTheme(1)
-
-        assert(savedTheme == programTheme)
-    }
-
-    @Test
-    fun `Should save program theme to preferences`() {
-        presenter.saveProgramTheme(1)
-
-        verify(preferenceProvider).setValue(any(), any())
-    }
-
-    @Test
-    fun `Should remove program theme from preferences`() {
-        presenter.removeProgramTheme()
-
-        verify(preferenceProvider).removeValue(any())
     }
 
     @Test
@@ -364,7 +353,8 @@ class TeiDashboardPresenterTest {
             schedulers,
             analyticsHelper,
             preferenceProvider,
-            filterManager
+            filterManager,
+            matomoAnalyticsController
         )
 
         val isGrouped = presenter.programGrouping

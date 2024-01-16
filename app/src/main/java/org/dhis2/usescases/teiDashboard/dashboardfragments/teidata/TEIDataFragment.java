@@ -1,9 +1,21 @@
 package org.dhis2.usescases.teiDashboard.dashboardfragments.teidata;
 
+import static android.app.Activity.RESULT_OK;
+import static com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.withCrossFade;
+import static org.dhis2.commons.Constants.ENROLLMENT_UID;
+import static org.dhis2.commons.Constants.EVENT_CREATION_TYPE;
+import static org.dhis2.commons.Constants.EVENT_PERIOD_TYPE;
+import static org.dhis2.commons.Constants.EVENT_REPEATABLE;
+import static org.dhis2.commons.Constants.EVENT_SCHEDULE_INTERVAL;
+import static org.dhis2.commons.Constants.ORG_UNIT;
+import static org.dhis2.commons.Constants.PROGRAM_UID;
+import static org.dhis2.commons.Constants.TRACKED_ENTITY_INSTANCE;
+import static org.dhis2.utils.analytics.AnalyticsConstants.CREATE_EVENT_TEI;
+import static org.dhis2.utils.analytics.AnalyticsConstants.TYPE_EVENT_TEI;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,6 +28,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.databinding.ObservableBoolean;
+import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.DividerItemDecoration;
 
@@ -24,36 +37,39 @@ import com.bumptech.glide.load.resource.bitmap.CircleCrop;
 
 import org.dhis2.App;
 import org.dhis2.R;
+import org.dhis2.commons.Constants;
+import org.dhis2.commons.animations.ViewAnimationsKt;
+import org.dhis2.commons.data.EventCreationType;
+import org.dhis2.commons.data.EventViewModel;
+import org.dhis2.commons.data.StageSection;
 import org.dhis2.commons.dialogs.CustomDialog;
 import org.dhis2.commons.dialogs.DialogClickListener;
+import org.dhis2.data.biometrics.BiometricsClient;
 import org.dhis2.data.biometrics.BiometricsClientFactory;
 import org.dhis2.data.biometrics.VerifyResult;
+import org.dhis2.commons.dialogs.imagedetail.ImageDetailBottomDialog;
+import org.dhis2.commons.filters.FilterItem;
+import org.dhis2.commons.filters.FilterManager;
+import org.dhis2.commons.filters.FiltersAdapter;
+import org.dhis2.commons.orgunitselector.OUTreeFragment;
+import org.dhis2.commons.resources.ObjectStyleUtils;
+import org.dhis2.commons.sync.SyncContext;
 import org.dhis2.databinding.FragmentTeiDataBinding;
 import org.dhis2.usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity;
 import org.dhis2.usescases.general.FragmentGlobalAbstract;
-import org.dhis2.commons.orgunitselector.OUTreeFragment;
-import org.dhis2.commons.orgunitselector.OnOrgUnitSelectionFinished;
 import org.dhis2.usescases.programStageSelection.ProgramStageSelectionActivity;
 import org.dhis2.usescases.teiDashboard.DashboardProgramModel;
 import org.dhis2.usescases.teiDashboard.DashboardViewModel;
 import org.dhis2.usescases.teiDashboard.TeiDashboardMobileActivity;
+import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.CategoryDialogInteractions;
 import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventAdapter;
-import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventViewModel;
-import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventViewModelType;
-import org.dhis2.utils.Constants;
+import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventCatComboOptionSelector;
+import org.dhis2.usescases.teiDashboard.ui.DetailsButtonKt;
 import org.dhis2.utils.DateUtils;
-import org.dhis2.utils.EventCreationType;
-import org.dhis2.utils.ObjectStyleUtils;
-import org.dhis2.utils.category.CategoryDialog;
-import org.dhis2.utils.customviews.ImageDetailBottomDialog;
 import org.dhis2.utils.dialFloatingActionButton.DialItem;
-import org.dhis2.commons.filters.FilterItem;
-import org.dhis2.commons.filters.FilterManager;
-import org.dhis2.commons.filters.FiltersAdapter;
 import org.dhis2.utils.granularsync.SyncStatusDialog;
 import org.hisp.dhis.android.core.enrollment.Enrollment;
 import org.hisp.dhis.android.core.enrollment.EnrollmentStatus;
-import org.hisp.dhis.android.core.event.Event;
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 import org.hisp.dhis.android.core.program.Program;
 import org.hisp.dhis.android.core.program.ProgramStage;
@@ -62,8 +78,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.inject.Inject;
@@ -72,33 +88,19 @@ import io.reactivex.Flowable;
 import io.reactivex.Single;
 import io.reactivex.functions.Consumer;
 import kotlin.Unit;
+import kotlin.jvm.functions.Function1;
 import timber.log.Timber;
 
-import static android.app.Activity.RESULT_OK;
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_GUID;
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_TEI_ORGANISATION_UNIT;
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_VERIFICATION_STATUS;
+import static org.dhis2.commons.biometrics.BiometricConstantsKt.BIOMETRICS_VERIFY_REQUEST;
+import static org.dhis2.commons.biometrics.ExtensionsKt.getBioIconBasic;
+import static org.dhis2.commons.biometrics.ExtensionsKt.getBioIconFailed;
+import static org.dhis2.commons.biometrics.ExtensionsKt.getBioIconSuccess;
+import static org.dhis2.commons.biometrics.ExtensionsKt.getBioIconWarning;
 
-import static com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions.withCrossFade;
-
-import static org.dhis2.usescases.biometrics.BiometricConstantsKt.BIOMETRICS_GUID;
-import static org.dhis2.usescases.biometrics.BiometricConstantsKt.BIOMETRICS_TEI_ORGANISATION_UNIT;
-import static org.dhis2.usescases.biometrics.BiometricConstantsKt.BIOMETRICS_VERIFICATION_STATUS;
-import static org.dhis2.usescases.biometrics.BiometricConstantsKt.BIOMETRICS_VERIFY_REQUEST;
-import static org.dhis2.usescases.biometrics.ExtensionsKt.getBioIconBasic;
-import static org.dhis2.usescases.biometrics.ExtensionsKt.getBioIconFailed;
-import static org.dhis2.usescases.biometrics.ExtensionsKt.getBioIconSuccess;
-import static org.dhis2.usescases.biometrics.ExtensionsKt.getBioIconWarning;
-import static org.dhis2.utils.Constants.ENROLLMENT_UID;
-import static org.dhis2.utils.Constants.EVENT_CREATION_TYPE;
-import static org.dhis2.utils.Constants.EVENT_PERIOD_TYPE;
-import static org.dhis2.utils.Constants.EVENT_REPEATABLE;
-import static org.dhis2.utils.Constants.EVENT_SCHEDULE_INTERVAL;
-import static org.dhis2.utils.Constants.ORG_UNIT;
-import static org.dhis2.utils.Constants.PROGRAM_UID;
-import static org.dhis2.utils.Constants.TRACKED_ENTITY_INSTANCE;
-import static org.dhis2.utils.analytics.AnalyticsConstants.CREATE_EVENT_TEI;
-import static org.dhis2.utils.analytics.AnalyticsConstants.TYPE_EVENT_TEI;
-
-public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataContracts.View,
-        OnOrgUnitSelectionFinished {
+public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataContracts.View {
 
     private static final int REQ_DETAILS = 1001;
     private static final int REQ_EVENT = 2001;
@@ -115,7 +117,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     private FragmentTeiDataBinding binding;
 
     @Inject
-    TEIDataContracts.Presenter presenter;
+    TEIDataPresenter presenter;
 
     @Inject
     FilterManager filterManager;
@@ -128,9 +130,8 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     private CustomDialog dialog;
     private ProgramStage programStageFromEvent;
     private final ObservableBoolean followUp = new ObservableBoolean(false);
+    private EventCatComboOptionSelector eventCatComboOptionSelector;
 
-    private boolean hasCatComb;
-    private final ArrayList<Event> catComboShowed = new ArrayList<>();
     private Context context;
     private DashboardViewModel dashboardViewModel;
     private DashboardProgramModel dashboardModel;
@@ -138,7 +139,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     private PopupMenu popupMenu;
 
     public static TEIDataFragment newInstance(String programUid, String teiUid,
-            String enrollmentUid) {
+                                              String enrollmentUid) {
         TEIDataFragment fragment = new TEIDataFragment();
         Bundle args = new Bundle();
         args.putString("PROGRAM_UID", programUid);
@@ -172,7 +173,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-            @Nullable Bundle savedInstanceState) {
+                             @Nullable Bundle savedInstanceState) {
         binding = DataBindingUtil.inflate(inflater, R.layout.fragment_tei_data, container, false);
         binding.setPresenter(presenter);
         activity.observeGrouping().observe(getViewLifecycleOwner(), group -> {
@@ -239,8 +240,14 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     }
 
     @Override
-    public void launchBiometricsVerification(String guid, String orgUnitUid) {
-        BiometricsClientFactory.INSTANCE.get(context).verify(this, guid, orgUnitUid);
+    public void launchBiometricsVerification(String guid, String orgUnitUid, String trackedEntityInstanceId) {
+
+        BiometricsClient biometricsClient = BiometricsClientFactory.INSTANCE.get(context);
+
+        HashMap extras = new HashMap<>();
+        extras.put(BiometricsClient.SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID, trackedEntityInstanceId);
+
+        biometricsClient.verify(this, guid, orgUnitUid, extras);
     }
 
     @Override
@@ -321,7 +328,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
 
     @Override
     public void setTrackedEntityInstance(TrackedEntityInstance trackedEntityInstance,
-            OrganisationUnit organisationUnit) {
+                                         OrganisationUnit organisationUnit) {
         binding.setTrackEntity(trackedEntityInstance);
         binding.cardFront.orgUnit.setText(organisationUnit.displayName());
     }
@@ -332,27 +339,45 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
         if (nprogram != null && nprogram.getCurrentEnrollment() != null) {
             binding.dialFabLayout.setFabVisible(true);
             presenter.setDashboardProgram(this.dashboardModel);
-            SharedPreferences prefs = context.getSharedPreferences(Constants.SHARE_PREFS,
-                    Context.MODE_PRIVATE);
-            hasCatComb = nprogram.getCurrentProgram() != null
-                    && !nprogram.getCurrentProgram().categoryComboUid().equals(
-                    prefs.getString(Constants.DEFAULT_CAT_COMBO, ""));
+            eventCatComboOptionSelector = new EventCatComboOptionSelector(nprogram.getCurrentProgram().categoryComboUid(),
+                    getChildFragmentManager(),
+                    new CategoryDialogInteractions() {
+                        @Override
+                        public void showDialog(
+                                @NonNull String categoryComboUid,
+                                @Nullable Date dateControl,
+                                @NonNull FragmentManager fragmentManager,
+                                @NonNull Function1<? super String, Unit> onItemSelected) {
+                            CategoryDialogInteractions.DefaultImpls.showDialog(this,
+                                    categoryComboUid,
+                                    dateControl,
+                                    fragmentManager,
+                                    onItemSelected);
+                        }
+                    });
             binding.setDashboardModel(nprogram);
             updateFabItems();
         } else if (nprogram != null) {
             binding.dialFabLayout.setFabVisible(false);
             binding.teiRecycler.setAdapter(new DashboardProgramAdapter(presenter, nprogram));
-            binding.teiRecycler.addItemDecoration(
-                    new DividerItemDecoration(getAbstracContext(), DividerItemDecoration.VERTICAL));
+            binding.teiRecycler.addItemDecoration(new DividerItemDecoration(getAbstracContext(), DividerItemDecoration.VERTICAL));
             binding.setDashboardModel(nprogram);
             showLoadingProgress(false);
         }
 
+        DetailsButtonKt.setButtonContent(
+                binding.cardFront.detailsButton,
+                activity.presenter.getTEType(),
+                () -> {
+                    presenter.seeDetails(binding.cardFront.cardData, dashboardModel);
+                    return Unit.INSTANCE;
+                }
+        );
+
         binding.executePendingBindings();
 
         if (getSharedPreferences().getString(PREF_COMPLETED_EVENT, null) != null) {
-            presenter.displayGenerateEvent(
-                    getSharedPreferences().getString(PREF_COMPLETED_EVENT, null));
+            presenter.displayGenerateEvent(getSharedPreferences().getString(PREF_COMPLETED_EVENT, null));
             getSharedPreferences().edit().remove(PREF_COMPLETED_EVENT).apply();
         }
 
@@ -390,8 +415,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     }
 
     @Override
-    public Flowable<String> observeStageSelection(Program currentProgram,
-            Enrollment currentEnrollment) {
+    public Flowable<StageSection> observeStageSelection(Program currentProgram, Enrollment currentEnrollment) {
         if (adapter == null) {
             adapter = new EventAdapter(presenter, currentProgram);
             adapter.setEnrollment(currentEnrollment);
@@ -417,20 +441,8 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
             adapter.submitList(events);
 
             for (EventViewModel eventViewModel : events) {
-                if (eventViewModel.getType() == EventViewModelType.EVENT) {
-                    Event event = eventViewModel.getEvent();
-                    if (event.eventDate() != null) {
-                        if (event.eventDate().after(DateUtils.getInstance().getToday())) {
-                            binding.teiRecycler.scrollToPosition(events.indexOf(event));
-                        }
-                    }
-                    if (hasCatComb && event.attributeOptionCombo() == null
-                            && !catComboShowed.contains(event)) {
-                        presenter.getCatComboOptions(event);
-                        catComboShowed.add(event);
-                    } else if (!hasCatComb && event.attributeOptionCombo() == null) {
-                        presenter.setDefaultCatOptCombToEvent(event.uid());
-                    }
+                if (eventViewModel.isAfterToday(DateUtils.getInstance().getToday())) {
+                    binding.teiRecycler.scrollToPosition(events.indexOf(eventViewModel));
                 }
             }
         }
@@ -449,8 +461,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     public Consumer<ProgramStage> displayGenerateEvent() {
         return programStageModel -> {
             this.programStageFromEvent = programStageModel;
-            if (programStageModel.displayGenerateEventBox()
-                    || programStageModel.allowGenerateNextVisit()) {
+            if (programStageModel.displayGenerateEventBox() || programStageModel.allowGenerateNextVisit()) {
                 dialog = new CustomDialog(
                         getContext(),
                         getString(R.string.dialog_generate_new_event),
@@ -461,22 +472,18 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
                         new DialogClickListener() {
                             @Override
                             public void onPositive() {
-                                createEvent(EventCreationType.SCHEDULE,
-                                        programStageFromEvent.standardInterval() != null
-                                                ? programStageFromEvent.standardInterval() : 0);
+                                createEvent(EventCreationType.SCHEDULE, programStageFromEvent.standardInterval() != null ? programStageFromEvent.standardInterval() : 0);
                             }
 
                             @Override
                             public void onNegative() {
-                                if (programStageFromEvent.remindCompleted()) {
+                                if (Boolean.TRUE.equals(programStageFromEvent.remindCompleted()))
                                     presenter.areEventsCompleted();
-                                }
                             }
                         });
                 dialog.show();
-            } else if (programStageModel.remindCompleted()) {
+            } else if (Boolean.TRUE.equals(programStageModel.remindCompleted()))
                 showDialogCloseProgram();
-            }
         };
     }
 
@@ -532,9 +539,8 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     @Override
     public Consumer<EnrollmentStatus> enrollmentCompleted() {
         return enrollmentStatus -> {
-            if (enrollmentStatus == EnrollmentStatus.COMPLETED) {
+            if (enrollmentStatus == EnrollmentStatus.COMPLETED)
                 activity.updateStatus();
-            }
         };
     }
 
@@ -544,8 +550,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
             Bundle bundle = new Bundle();
             bundle.putString(PROGRAM_UID, dashboardModel.getCurrentEnrollment().program());
             bundle.putString(TRACKED_ENTITY_INSTANCE, dashboardModel.getTei().uid());
-            if (presenter.enrollmentOrgUnitInCaptureScope(
-                    dashboardModel.getCurrentOrgUnit().uid())) {
+            if (presenter.enrollmentOrgUnitInCaptureScope(dashboardModel.getCurrentOrgUnit().uid())) {
                 bundle.putString(ORG_UNIT, dashboardModel.getCurrentOrgUnit().uid());
             }
             bundle.putString(ENROLLMENT_UID, dashboardModel.getCurrentEnrollment().uid());
@@ -564,22 +569,6 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
     }
 
     @Override
-    public void showCatComboDialog(String eventId, Date eventDate, String categoryComboUid) {
-        CategoryDialog categoryDialog = new CategoryDialog(
-                CategoryDialog.Type.CATEGORY_OPTION_COMBO,
-                categoryComboUid,
-                true,
-                eventDate,
-                selectedCatOptComboUid -> {
-                    presenter.changeCatOption(eventId, selectedCatOptComboUid);
-                    return null;
-                }
-        );
-        categoryDialog.setCancelable(false);
-        categoryDialog.show(getChildFragmentManager(), CategoryDialog.Companion.getTAG());
-    }
-
-    @Override
     public void switchFollowUp(boolean followUp) {
         this.followUp.set(followUp);
     }
@@ -594,19 +583,13 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
 
     @Override
     public void restoreAdapter(String programUid, String teiUid, String enrollmentUid) {
-        activity.startActivity(
-                TeiDashboardMobileActivity.intent(activity, teiUid, programUid, enrollmentUid));
+        activity.startActivity(TeiDashboardMobileActivity.intent(activity, teiUid, programUid, enrollmentUid));
         activity.finish();
     }
 
     @Override
     public void seeDetails(Intent intent, Bundle bundle) {
         this.startActivityForResult(intent, REQ_DETAILS, bundle);
-    }
-
-    @Override
-    public void showQR(Intent intent) {
-        startActivity(intent);
     }
 
     @Override
@@ -633,8 +616,7 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
             Glide.with(this)
                     .load(new File(filePath))
                     .error(
-                            ObjectStyleUtils.getIconResource(context, defaultIcon,
-                                    R.drawable.photo_temp_gray)
+                            ObjectStyleUtils.getIconResource(context, defaultIcon, R.drawable.photo_temp_gray)
                     )
                     .transition(withCrossFade())
                     .transform(new CircleCrop())
@@ -692,25 +674,32 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
         bundle.putBoolean(EVENT_REPEATABLE, programStage.repeatable());
         bundle.putSerializable(EVENT_PERIOD_TYPE, programStage.periodType());
         bundle.putString(Constants.PROGRAM_STAGE_UID, programStage.uid());
-        bundle.putInt(EVENT_SCHEDULE_INTERVAL,
-                programStage.standardInterval() != null ? programStage.standardInterval() : 0);
+        bundle.putInt(EVENT_SCHEDULE_INTERVAL, programStage.standardInterval() != null ? programStage.standardInterval() : 0);
 
         bundle.putString(BIOMETRICS_GUID, dashboardModel.getTrackedBiometricEntityValue());
         bundle.putInt(BIOMETRICS_VERIFICATION_STATUS, -1);
         bundle.putString(BIOMETRICS_TEI_ORGANISATION_UNIT,
                 dashboardModel.getCurrentOrgUnit().uid());
-
         intent.putExtras(bundle);
         startActivityForResult(intent, REQ_EVENT);
     }
 
     private void showHideFilters(boolean showFilters) {
         if (showFilters) {
-            binding.teiData.setVisibility(View.GONE);
-            binding.filterLayout.setVisibility(View.VISIBLE);
+            ViewAnimationsKt.expand(binding.filterLayout, false, () -> {
+                binding.teiData.setVisibility(View.GONE);
+                binding.filterLayout.setVisibility(View.VISIBLE);
+                return Unit.INSTANCE;
+            });
+
         } else {
-            binding.teiData.setVisibility(View.VISIBLE);
-            binding.filterLayout.setVisibility(View.GONE);
+            ViewAnimationsKt.collapse(binding.filterLayout, () -> {
+                binding.teiData.setVisibility(View.VISIBLE);
+                binding.filterLayout.setVisibility(View.GONE);
+                return Unit.INSTANCE;
+            });
+
+
         }
     }
 
@@ -730,30 +719,45 @@ public class TEIDataFragment extends FragmentGlobalAbstract implements TEIDataCo
 
     @Override
     public void openOrgUnitTreeSelector(String programUid) {
-        OUTreeFragment ouTreeFragment = OUTreeFragment.Companion.newInstance(true,
-                FilterManager.getInstance().getOrgUnitUidsFilters());
-        ouTreeFragment.setSelectionCallback(this);
-        ouTreeFragment.show(getChildFragmentManager(), "OUTreeFragment");
-    }
-
-    @Override
-    public void showSyncDialog(String uid) {
-        SyncStatusDialog dialog = new SyncStatusDialog.Builder()
-                .setConflictType(SyncStatusDialog.ConflictType.TEI)
-                .setUid(uid)
-                .onDismissListener(hasChanged -> {
-                    if (hasChanged) {
-                        FilterManager.getInstance().publishData();
-                    }
-
+        new OUTreeFragment.Builder()
+                .showAsDialog()
+                .withPreselectedOrgUnits(
+                        FilterManager.getInstance().getOrgUnitUidsFilters()
+                )
+                .onSelection(selectedOrgUnits -> {
+                    presenter.setOrgUnitFilters((List<OrganisationUnit>) selectedOrgUnits);
+                    return Unit.INSTANCE;
                 })
-                .build();
-
-        dialog.show(getChildFragmentManager(), uid);
+                .build().show(getChildFragmentManager(), "OUTreeFragment");
     }
 
     @Override
-    public void onSelectionFinished(@NotNull List<? extends OrganisationUnit> selectedOrgUnits) {
-        presenter.setOrgUnitFilters((List<OrganisationUnit>) selectedOrgUnits);
+    public void showSyncDialog(String eventUid, String enrollmentUid) {
+        new SyncStatusDialog.Builder()
+                .withContext(this, null)
+                .withSyncContext(
+                        new SyncContext.EnrollmentEvent(eventUid, enrollmentUid)
+                )
+                .onDismissListener(hasChanged -> {
+                    if (hasChanged)
+                        FilterManager.getInstance().publishData();
+
+                }).show(enrollmentUid);
+    }
+
+    @Override
+    public void displayCatComboOptionSelectorForEvents(List<EventViewModel> data) {
+        eventCatComboOptionSelector.setEventsWithoutCatComboOption(data);
+        eventCatComboOptionSelector.requestCatComboOption(
+                (eventUid, categoryOptionComboUid) -> {
+                    presenter.changeCatOption(eventUid, categoryOptionComboUid);
+                    return null;
+                }
+        );
+    }
+
+    @Override
+    public void showProgramRuleErrorMessage(@NonNull String message) {
+        activity.runOnUiThread(() -> showDescription(message));
     }
 }

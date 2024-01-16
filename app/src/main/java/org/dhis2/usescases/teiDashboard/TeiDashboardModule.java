@@ -6,11 +6,12 @@ import org.dhis2.commons.di.dagger.PerActivity;
 import org.dhis2.commons.prefs.PreferenceProvider;
 import org.dhis2.data.forms.EnrollmentFormRepository;
 import org.dhis2.data.forms.FormRepository;
-import org.dhis2.data.forms.RulesRepository;
+import org.dhis2.form.data.RulesRepository;
 import org.dhis2.data.forms.dataentry.EnrollmentRuleEngineRepository;
 import org.dhis2.data.forms.dataentry.RuleEngineRepository;
 import org.dhis2.commons.schedulers.SchedulerProvider;
 import org.dhis2.utils.analytics.AnalyticsHelper;
+import org.dhis2.commons.matomo.MatomoAnalyticsController;
 import org.dhis2.utils.customviews.navigationbar.NavigationPageConfigurator;
 import org.dhis2.commons.filters.FilterManager;
 import org.dhis2.commons.resources.ResourceManager;
@@ -23,7 +24,6 @@ import dhis2.org.analytics.charts.Charts;
 /**
  * QUADRAM. Created by ppajuelo on 30/11/2017.
  */
-@PerActivity
 @Module
 public class TeiDashboardModule {
 
@@ -53,7 +53,8 @@ public class TeiDashboardModule {
                                                      SchedulerProvider schedulerProvider,
                                                      AnalyticsHelper analyticsHelper,
                                                      PreferenceProvider preferenceProvider,
-                                                     FilterManager filterManager) {
+                                                     FilterManager filterManager,
+                                                     MatomoAnalyticsController matomoAnalyticsController) {
         return new TeiDashboardPresenter(view,
                 teiUid,
                 programUid,
@@ -62,13 +63,14 @@ public class TeiDashboardModule {
                 schedulerProvider,
                 analyticsHelper,
                 preferenceProvider,
-                filterManager);
+                filterManager,
+                matomoAnalyticsController);
     }
 
     @Provides
     @PerActivity
-    DashboardRepository dashboardRepository(D2 d2, Charts charts, ResourceManager resources) {
-        return new DashboardRepositoryImpl(d2, charts, teiUid, programUid, enrollmentUid, resources);
+    DashboardRepository dashboardRepository(D2 d2, Charts charts, ResourceManager resources, TeiAttributesProvider teiAttributesProvider) {
+        return new DashboardRepositoryImpl(d2, charts, teiUid, programUid, enrollmentUid, resources, teiAttributesProvider);
     }
 
     @Provides
@@ -97,5 +99,11 @@ public class TeiDashboardModule {
     @PerActivity
     NavigationPageConfigurator pageConfigurator(DashboardRepository dashboardRepository) {
         return new TeiDashboardPageConfigurator(dashboardRepository, isPortrait);
+    }
+
+    @Provides
+    @PerActivity
+    TeiAttributesProvider teiAttributesProvider(D2 d2) {
+        return new TeiAttributesProvider(d2);
     }
 }

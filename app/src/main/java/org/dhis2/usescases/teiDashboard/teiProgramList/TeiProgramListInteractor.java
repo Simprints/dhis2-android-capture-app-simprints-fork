@@ -6,8 +6,12 @@ import android.widget.DatePicker;
 import org.dhis2.R;
 import org.dhis2.commons.dialogs.calendarpicker.CalendarPicker;
 import org.dhis2.commons.dialogs.calendarpicker.OnDatePickerListener;
+import org.dhis2.commons.orgunitselector.OUTreeFragment;
+import org.dhis2.commons.orgunitselector.OrgUnitSelectorScope;
+import org.dhis2.data.service.SyncStatusController;
+import org.dhis2.data.service.SyncStatusData;
+import org.dhis2.usescases.main.program.ProgramDownloadState;
 import org.dhis2.usescases.main.program.ProgramViewModel;
-import org.dhis2.utils.customviews.OrgUnitDialog;
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 import org.hisp.dhis.android.core.program.Program;
 import org.jetbrains.annotations.NotNull;
@@ -21,7 +25,9 @@ import java.util.List;
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
+import kotlin.Unit;
 import timber.log.Timber;
 
 /**
@@ -35,9 +41,16 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     private CompositeDisposable compositeDisposable;
     private final TeiProgramListRepository teiProgramListRepository;
     private Date selectedEnrollmentDate;
+    private PublishProcessor<Unit> refreshData = PublishProcessor.create();
+    private SyncStatusController syncStatusController;
+    private SyncStatusData lastSyncData = null;
 
-    TeiProgramListInteractor(TeiProgramListRepository teiProgramListRepository) {
+    TeiProgramListInteractor(
+            TeiProgramListRepository teiProgramListRepository,
+            SyncStatusController syncStatusController
+    ) {
         this.teiProgramListRepository = teiProgramListRepository;
+        this.syncStatusController = syncStatusController;
     }
 
     @Override
@@ -51,7 +64,7 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         getPrograms();
     }
 
-    private void showCustomCalendar(String programUid, String uid, OrgUnitDialog orgUnitDialog) {
+    private void showCustomCalendar(String programUid, String uid, OUTreeFragment orgUnitDialog) {
         CalendarPicker dialog = new CalendarPicker(view.getContext());
 
         Program selectedProgram = getProgramFromUid(programUid);
@@ -84,27 +97,9 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
                 compositeDisposable.add(getOrgUnits(programUid)
                         .subscribeOn(Schedulers.io())
                         .observeOn(AndroidSchedulers.mainThread())
-                        .subscribe(
-                                allOrgUnits -> {
-                                    ArrayList<OrganisationUnit> orgUnits = new ArrayList<>();
-                                    for (OrganisationUnit orgUnit : allOrgUnits) {
-                                        boolean afterOpening = false;
-                                        boolean beforeClosing = false;
-                                        if (orgUnit.openingDate() == null || !selectedEnrollmentDate.before(orgUnit.openingDate()))
-                                            afterOpening = true;
-                                        if (orgUnit.closedDate() == null || !selectedEnrollmentDate.after(orgUnit.closedDate()))
-                                            beforeClosing = true;
-                                        if (afterOpening && beforeClosing)
-                                            orgUnits.add(orgUnit);
-                                    }
-                                    if (orgUnits.size() > 1) {
-                                        orgUnitDialog.setOrgUnits(orgUnits);
-                                        if (!orgUnitDialog.isAdded())
-                                            orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
-                                    } else if (!orgUnits.isEmpty())
-                                        enrollInOrgUnit(orgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
-                                    else
-                                        view.displayMessage(view.getContext().getString(R.string.no_org_units));
+                        .subscribe(allOrgUnits -> {
+                                    List<OrganisationUnit> orgUnits = filterOrgUnits(allOrgUnits);
+                                    handleCalendarResult(orgUnitDialog, orgUnits, programUid, uid);
                                 },
                                 Timber::d
                         ));
@@ -114,19 +109,48 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
         dialog.show();
     }
 
+    private List<OrganisationUnit> filterOrgUnits(List<OrganisationUnit> allOrgUnits) {
+        ArrayList<OrganisationUnit> orgUnits = new ArrayList<>();
+        for (OrganisationUnit orgUnit : allOrgUnits) {
+            boolean afterOpening = false;
+            boolean beforeClosing = false;
+            if (orgUnit.openingDate() == null || !selectedEnrollmentDate.before(orgUnit.openingDate()))
+                afterOpening = true;
+            if (orgUnit.closedDate() == null || !selectedEnrollmentDate.after(orgUnit.closedDate()))
+                beforeClosing = true;
+            if (afterOpening && beforeClosing)
+                orgUnits.add(orgUnit);
+        }
+        return orgUnits;
+    }
+
+    private void handleCalendarResult(
+            OUTreeFragment orgUnitDialog,
+            List<OrganisationUnit> orgUnits,
+            String programUid,
+            String uid) {
+        if (orgUnits.size() > 1) {
+            orgUnitDialog.show(view.getAbstracContext().getSupportFragmentManager(), "OrgUnitEnrollment");
+        } else if (!orgUnits.isEmpty()) {
+            enrollInOrgUnit(orgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
+        } else {
+            view.displayMessage(view.getContext().getString(R.string.no_org_units));
+        }
+    }
+
     @Override
     public void enroll(String programUid, String uid) {
         selectedEnrollmentDate = Calendar.getInstance().getTime();
-
-        OrgUnitDialog orgUnitDialog = OrgUnitDialog.getInstace().setMultiSelection(false);
-        orgUnitDialog.setProgram(programUid);
-        orgUnitDialog.setTitle("Enrollment Org Unit")
-                .setPossitiveListener(v -> {
-                    if (orgUnitDialog.getSelectedOrgUnit() != null && !orgUnitDialog.getSelectedOrgUnit().isEmpty())
-                        enrollInOrgUnit(orgUnitDialog.getSelectedOrgUnit(), programUid, uid, selectedEnrollmentDate);
-                    orgUnitDialog.dismiss();
+        OUTreeFragment orgUnitDialog = new OUTreeFragment.Builder()
+                .showAsDialog()
+                .singleSelection()
+                .onSelection(selectedOrgUnits -> {
+                    if (!selectedOrgUnits.isEmpty())
+                        enrollInOrgUnit(selectedOrgUnits.get(0).uid(), programUid, uid, selectedEnrollmentDate);
+                    return Unit.INSTANCE;
                 })
-                .setNegativeListener(v -> orgUnitDialog.dismiss());
+                .orgUnitScope(new OrgUnitSelectorScope.ProgramCaptureScope(programUid))
+                .build();
 
         showCustomCalendar(programUid, uid, orgUnitDialog);
     }
@@ -177,13 +201,46 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     }
 
     private void getPrograms() {
-        compositeDisposable.add(teiProgramListRepository.allPrograms(trackedEntityId)
-                .subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe(
-                        this::getAlreadyEnrolledPrograms,
-                        Timber::d)
+        compositeDisposable.add(
+                refreshData.startWith(Unit.INSTANCE)
+                        .flatMap(unit -> teiProgramListRepository.allPrograms(trackedEntityId))
+                        .map(programViewModels -> {
+                            List<ProgramViewModel> programModels = new ArrayList<>();
+                            for (ProgramViewModel programModel : programViewModels) {
+                                programModels.add(
+                                        teiProgramListRepository.updateProgramViewModel(
+                                                programModel,
+                                                getSyncState(programModel)
+                                        )
+                                );
+                            }
+                            return programModels;
+                        })
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(
+                                this::getAlreadyEnrolledPrograms,
+                                Timber::d)
         );
+    }
+
+    private ProgramDownloadState getSyncState(ProgramViewModel programViewModel) {
+        ProgramDownloadState programDownloadState;
+        if (syncStatusController.observeDownloadProcess().getValue().isProgramDownloading(
+                programViewModel.getUid()
+        )) {
+            programDownloadState = ProgramDownloadState.DOWNLOADING;
+        } else if (syncStatusController.observeDownloadProcess().getValue().wasProgramDownloading(
+                lastSyncData,
+                programViewModel.getUid())
+        ) {
+            programDownloadState = ProgramDownloadState.DOWNLOADED;
+        } else if (programViewModel.getDownloadState() == ProgramDownloadState.ERROR) {
+            programDownloadState = ProgramDownloadState.ERROR;
+        } else {
+            programDownloadState = ProgramDownloadState.NONE;
+        }
+        return programDownloadState;
     }
 
     private void getAlreadyEnrolledPrograms(List<ProgramViewModel> programs) {
@@ -202,7 +259,7 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
             boolean isAlreadyEnrolled = false;
             boolean onlyEnrollOnce = false;
             for (Program program : alreadyEnrolledPrograms) {
-                if (programViewModel.id().equals(program.uid())) {
+                if (programViewModel.getUid().equals(program.uid())) {
                     isAlreadyEnrolled = true;
                     onlyEnrollOnce = program.onlyEnrollOnce();
                 }
@@ -211,7 +268,7 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
                 programListToPrint.add(programViewModel);
             }
         }
-        Collections.sort(programListToPrint, (program1, program2) -> program1.title().compareToIgnoreCase(program2.title()));
+        Collections.sort(programListToPrint, (program1, program2) -> program1.getTitle().compareToIgnoreCase(program2.getTitle()));
         view.setPrograms(programListToPrint);
     }
 
@@ -223,5 +280,10 @@ public class TeiProgramListInteractor implements TeiProgramListContract.Interact
     @Override
     public void onDettach() {
         compositeDisposable.clear();
+    }
+
+    @Override
+    public void refreshData() {
+        refreshData.onNext(Unit.INSTANCE);
     }
 }

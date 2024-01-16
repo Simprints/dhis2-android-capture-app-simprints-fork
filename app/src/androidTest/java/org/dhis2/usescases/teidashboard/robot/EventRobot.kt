@@ -1,5 +1,8 @@
 package org.dhis2.usescases.teidashboard.robot
 
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
@@ -17,12 +20,12 @@ import org.dhis2.common.matchers.hasCompletedPercentage
 import org.dhis2.common.viewactions.clickChildViewWithId
 import org.dhis2.common.viewactions.scrollToBottomRecyclerView
 import org.dhis2.common.viewactions.typeChildViewWithId
-import org.dhis2.data.forms.dataentry.fields.FormViewHolder
-import org.dhis2.usescases.event.entity.EventDetailsUIModel
+import org.dhis2.form.ui.FormViewHolder
+import org.dhis2.ui.dialogs.bottomsheet.MAIN_BUTTON_TAG
+import org.dhis2.ui.dialogs.bottomsheet.SECONDARY_BUTTON_TAG
 import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.DashboardProgramViewHolder
-import org.hamcrest.Matchers
-import org.hamcrest.Matchers.allOf
-import org.hamcrest.Matchers.not
+import org.hamcrest.CoreMatchers.allOf
+import org.hamcrest.CoreMatchers.not
 
 fun eventRobot(eventRobot: EventRobot.() -> Unit) {
     EventRobot().apply {
@@ -39,16 +42,16 @@ class EventRobot : BaseRobot() {
     fun clickOnFormFabButton() {
         onView(withId(R.id.actionButton)).perform(click())
     }
-    fun clickOnFinish() {
-        onView(withId(R.id.finish)).perform(click())
+    fun clickOnNotNow(composeTestRule: ComposeTestRule) {
+        composeTestRule.onNodeWithTag(SECONDARY_BUTTON_TAG).performClick()
     }
 
-    fun clickOnFinishAndComplete() {
-        onView(withId(R.id.complete)).perform(click())
+    fun clickOnCompleteButton(composeTestRule: ComposeTestRule) {
+        composeTestRule.onNodeWithTag(MAIN_BUTTON_TAG).performClick()
     }
 
     fun clickOnReopen() {
-        onView(withId(R.id.reopen)).perform(click())
+        onView(withId(R.id.reopenButton)).perform(click())
     }
 
     fun fillRadioButtonForm(numberFields: Int) {

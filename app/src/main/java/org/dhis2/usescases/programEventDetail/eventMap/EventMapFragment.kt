@@ -4,21 +4,23 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.lifecycle.ViewModelProviders
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.updateLayoutParams
+import androidx.fragment.app.activityViewModels
 import com.mapbox.mapboxsdk.geometry.LatLng
 import com.mapbox.mapboxsdk.maps.MapboxMap
 import javax.inject.Inject
+import org.dhis2.Bindings.dp
 import org.dhis2.animations.CarouselViewAnimations
+import org.dhis2.commons.data.ProgramEventViewModel
+import org.dhis2.commons.locationprovider.LocationSettingLauncher
 import org.dhis2.databinding.FragmentProgramEventDetailMapBinding
-import org.dhis2.uicomponents.map.ExternalMapNavigation
-import org.dhis2.uicomponents.map.carousel.CarouselAdapter
-import org.dhis2.uicomponents.map.layer.MapLayerDialog
-import org.dhis2.uicomponents.map.managers.EventMapManager
+import org.dhis2.maps.carousel.CarouselAdapter
+import org.dhis2.maps.layer.MapLayerDialog
 import org.dhis2.usescases.general.FragmentGlobalAbstract
 import org.dhis2.usescases.programEventDetail.ProgramEventDetailActivity
 import org.dhis2.usescases.programEventDetail.ProgramEventDetailViewModel
 import org.dhis2.usescases.programEventDetail.ProgramEventMapData
-import org.dhis2.usescases.programEventDetail.ProgramEventViewModel
 
 class EventMapFragment :
     FragmentGlobalAbstract(),
@@ -31,15 +33,13 @@ class EventMapFragment :
     lateinit var animations: CarouselViewAnimations
 
     @Inject
-    lateinit var mapNavigation: ExternalMapNavigation
+    lateinit var mapNavigation: org.dhis2.maps.ExternalMapNavigation
 
-    private var eventMapManager: EventMapManager? = null
+    private var eventMapManager: org.dhis2.maps.managers.EventMapManager? = null
 
     private val fragmentLifeCycle = lifecycle
 
-    private val programEventsViewModel by lazy {
-        ViewModelProviders.of(requireActivity())[ProgramEventDetailViewModel::class.java]
-    }
+    private val programEventsViewModel: ProgramEventDetailViewModel by activityViewModels()
 
     @Inject
     lateinit var presenter: EventMapPresenter
@@ -48,22 +48,29 @@ class EventMapFragment :
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        (activity as ProgramEventDetailActivity).component.plus(EventMapModule(this)).inject(this)
+    ): View {
+        (activity as ProgramEventDetailActivity).component
+            ?.plus(EventMapModule(this))
+            ?.inject(this)
         programEventsViewModel.setProgress(true)
         binding = FragmentProgramEventDetailMapBinding.inflate(inflater, container, false)
         binding.apply {
-            eventMapManager = EventMapManager(mapView)
+            eventMapManager = org.dhis2.maps.managers.EventMapManager(mapView)
             eventMapManager?.let { fragmentLifeCycle.addObserver(it) }
             eventMapManager?.onCreate(savedInstanceState)
             eventMapManager?.featureType = presenter.programFeatureType()
-            eventMapManager?. onMapClickListener = this@EventMapFragment
+            eventMapManager?.onMapClickListener = this@EventMapFragment
             eventMapManager?.init(
+                mapStyles = programEventsViewModel.fetchMapStyles(),
                 onInitializationFinished = {
                     presenter.init()
                 },
                 onMissingPermission = { permissionsManager ->
-                    permissionsManager?.requestLocationPermissions(requireActivity())
+                    if (locationProvider.hasLocationEnabled()) {
+                        permissionsManager?.requestLocationPermissions(requireActivity())
+                    } else {
+                        LocationSettingLauncher.requestEnableLocationSetting(requireContext())
+                    }
                 }
             )
             mapLayerButton.setOnClickListener {
@@ -74,11 +81,27 @@ class EventMapFragment :
             }
 
             mapPositionButton.setOnClickListener {
-                eventMapManager?.centerCameraOnMyPosition { permissionManager ->
-                    permissionManager?.requestLocationPermissions(requireActivity())
+                if (locationProvider.hasLocationEnabled()) {
+                    eventMapManager?.centerCameraOnMyPosition { permissionManager ->
+                        permissionManager?.requestLocationPermissions(requireActivity())
+                    }
+                } else {
+                    LocationSettingLauncher.requestEnableLocationSetting(requireContext())
                 }
             }
         }
+
+        programEventsViewModel.backdropActive.observe(viewLifecycleOwner) { backdropActive ->
+            binding.mapView.updateLayoutParams<ConstraintLayout.LayoutParams> {
+                val bottomMargin = if (backdropActive) {
+                    0
+                } else {
+                    40.dp
+                }
+                setMargins(0, 0, 0, bottomMargin)
+            }
+        }
+
         return binding.root
     }
 

@@ -1,5 +1,6 @@
 package org.dhis2.usescases.login
 
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import co.infinum.goldfinger.Goldfinger
 import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.atMost
@@ -11,11 +12,17 @@ import com.nhaarman.mockitokotlin2.verifyNoMoreInteractions
 import com.nhaarman.mockitokotlin2.whenever
 import io.reactivex.Completable
 import io.reactivex.Observable
-import org.dhis2.commons.prefs.Preference
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import org.dhis2.commons.Constants.PREFS_URLS
+import org.dhis2.commons.Constants.PREFS_USERS
+import org.dhis2.commons.Constants.USER_ASKED_CRASHLYTICS
+import org.dhis2.commons.Constants.USER_TEST_ANDROID
+import org.dhis2.commons.network.NetworkUtils
 import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.commons.prefs.SECURE_PASS
 import org.dhis2.commons.prefs.SECURE_SERVER_URL
 import org.dhis2.commons.prefs.SECURE_USER_NAME
+import org.dhis2.commons.reporting.CrashReportController
 import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.data.fingerprint.FingerPrintController
 import org.dhis2.data.fingerprint.FingerPrintResult
@@ -23,27 +30,29 @@ import org.dhis2.data.fingerprint.Type
 import org.dhis2.data.schedulers.TrampolineSchedulerProvider
 import org.dhis2.data.server.UserManager
 import org.dhis2.usescases.main.MainActivity
-import org.dhis2.utils.Constants.PREFS_URLS
-import org.dhis2.utils.Constants.PREFS_USERS
-import org.dhis2.utils.Constants.USER_ASKED_CRASHLYTICS
-import org.dhis2.utils.Constants.USER_TEST_ANDROID
+import org.dhis2.utils.MainCoroutineScopeRule
 import org.dhis2.utils.DEFAULT_URL
 import org.dhis2.utils.TestingCredential
 import org.dhis2.utils.analytics.AnalyticsHelper
 import org.dhis2.utils.analytics.CLICK
 import org.dhis2.utils.analytics.LOGIN
 import org.dhis2.utils.analytics.SERVER_QR_SCANNER
-import org.dhis2.utils.reporting.CrashReportController
 import org.hisp.dhis.android.core.user.User
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mockito
 import retrofit2.Response
 
 class LoginPresenterTest {
 
-    private lateinit var loginPresenter: LoginPresenter
+    @get:Rule
+    val instantExecutorRule = InstantTaskExecutorRule()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @get:Rule
+    val coroutineScope = MainCoroutineScopeRule()
+
     private val schedulers: SchedulerProvider = TrampolineSchedulerProvider()
 
     private val preferenceProvider: PreferenceProvider = mock()
@@ -53,26 +62,23 @@ class LoginPresenterTest {
         Mockito.mock(UserManager::class.java, Mockito.RETURNS_DEEP_STUBS)
     private val analyticsHelper: AnalyticsHelper = mock()
     private val crashReportController: CrashReportController = mock()
-
-    @Before
-    fun setup() {
-        loginPresenter =
-            LoginPresenter(
-                view,
-                preferenceProvider,
-                schedulers,
-                goldfinger,
-                analyticsHelper,
-                crashReportController
-            )
-    }
+    private val network: NetworkUtils = mock()
 
     @Test
     fun `Should go to MainActivity if user is already logged in`() {
         whenever(userManager.isUserLoggedIn) doReturn Observable.just(true)
         whenever(preferenceProvider.getBoolean("SessionLocked", false)) doReturn false
 
-        loginPresenter.init(userManager)
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
 
         verify(view).startActivity(MainActivity::class.java, null, true, true, null)
         verifyNoMoreInteractions(view)
@@ -83,7 +89,16 @@ class LoginPresenterTest {
         whenever(userManager.isUserLoggedIn) doReturn Observable.just(true)
         whenever(preferenceProvider.getBoolean("SessionLocked", false)) doReturn true
 
-        loginPresenter.init(userManager)
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
 
         verify(view).showUnlockButton()
         verifyNoMoreInteractions(view)
@@ -102,7 +117,16 @@ class LoginPresenterTest {
         ) doReturn serverUrl
         whenever(preferenceProvider.getString(SECURE_USER_NAME, "")) doReturn userName
 
-        loginPresenter.init(userManager)
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
 
         verify(view).setUrl(serverUrl)
         verify(view).setUser(userName)
@@ -121,7 +145,16 @@ class LoginPresenterTest {
         ) doReturn null
         whenever(preferenceProvider.getString(SECURE_USER_NAME, "")) doReturn null
 
-        loginPresenter.init(userManager)
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
 
         verify(view).setUrl(protocol)
         verify(view,atMost(2)).getDefaultServerProtocol()
@@ -133,7 +166,16 @@ class LoginPresenterTest {
         val defaultProtocol = "https://"
         whenever(view.getDefaultServerProtocol()) doReturn defaultProtocol
 
-        loginPresenter.init(null)
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            null
+        )
 
         verify(view).getDefaultServerProtocol()
         verify(view).setUrl(any())
@@ -142,17 +184,30 @@ class LoginPresenterTest {
 
     @Test
     fun `Should show fabric dialog when continue is clicked and user has not been asked before`() {
-        whenever(
-            preferenceProvider.getBoolean(
-                USER_ASKED_CRASHLYTICS,
-                false
-            )
-        ) doReturn false
-        loginPresenter.onButtonClick()
+        val mockedUser: User = mock()
+
+        val loginPresenter = LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            null
+        )
+
+        whenever(view.initLogin()) doReturn userManager
+        whenever(userManager.logIn(any(), any(), any()))doReturn Observable.just(mockedUser)
+        loginPresenter.onServerChanged(serverUrl = "serverUrl", 0, 0, 0)
+        loginPresenter.onUserChanged(userName = "username", 0, 0, 0)
+        loginPresenter.onPassChanged(password = "pass", 0, 0, 0)
+
+        loginPresenter.onLoginButtonClick()
 
         verify(view).hideKeyboard()
         verify(analyticsHelper).setEvent(LOGIN, CLICK, LOGIN)
-        verify(view).showCrashlyticsDialog()
+        verify(view).saveUsersData(true, false)
     }
 
     @Test
@@ -163,16 +218,37 @@ class LoginPresenterTest {
                 false
             )
         ) doReturn true
-        loginPresenter.onButtonClick()
+
+        val loginPresenter = LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            null
+        )
+        whenever(view.initLogin()) doReturn userManager
+        loginPresenter.onLoginButtonClick()
 
         verify(view).hideKeyboard()
         verify(analyticsHelper).setEvent(LOGIN, CLICK, LOGIN)
-        verify(view).showLoginProgress(true)
+        assertTrue(loginPresenter.loginProgressVisible.value == false)
     }
 
     @Test
     fun `Should navigate to QR Activity`() {
-        loginPresenter.onQRClick()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onQRClick()
 
         verify(analyticsHelper).setEvent(SERVER_QR_SCANNER, CLICK, SERVER_QR_SCANNER)
         verify(view).navigateToQRActivity()
@@ -199,7 +275,16 @@ class LoginPresenterTest {
         whenever(preferenceProvider.getString(SECURE_USER_NAME)) doReturn "James"
         whenever(preferenceProvider.getString(SECURE_PASS)) doReturn "1234"
 
-        loginPresenter.onFingerprintClick()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onFingerprintClick()
 
         verify(view).showCredentialsData(
             Goldfinger.Type.SUCCESS,
@@ -225,7 +310,16 @@ class LoginPresenterTest {
             )
         ) doReturn true
 
-        loginPresenter.onFingerprintClick()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onFingerprintClick()
 
         view.showCredentialsData(Goldfinger.Type.ERROR, "none")
     }
@@ -246,7 +340,16 @@ class LoginPresenterTest {
             )
         ) doReturn false
 
-        loginPresenter.onFingerprintClick()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onFingerprintClick()
 
         verify(view).showEmptyCredentialsMessage()
     }
@@ -255,33 +358,70 @@ class LoginPresenterTest {
     fun `Should display message when authenticate throws an error`() {
         whenever(
             goldfinger.authenticate(view.getPromptParams())
-        ) doReturn Observable.error(Exception(LoginPresenter.AUTH_ERROR))
+        ) doReturn Observable.error(Exception(LoginViewModel.AUTH_ERROR))
 
-        loginPresenter.onFingerprintClick()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onFingerprintClick()
 
-        verify(view).displayMessage(LoginPresenter.AUTH_ERROR)
+        verify(view).displayMessage(LoginViewModel.AUTH_ERROR)
     }
 
     @Test
     fun `Should open account recovery when user does not remember it`() {
-        loginPresenter.onAccountRecovery()
+        whenever(network.isOnline()) doReturn true
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onAccountRecovery()
 
         verify(view).openAccountRecovery()
     }
 
     @Test
-    fun `Should stop reading fingerprint`() {
-        loginPresenter.stopReadingFingerprint()
+    fun `Should show message when no connection and user tries to recover account`() {
+        whenever(network.isOnline()) doReturn false
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).onAccountRecovery()
 
-        verify(goldfinger).cancel()
+        verify(view).showNoConnectionDialog()
     }
 
     @Test
-    fun `Should clear disposable when activity is destroyed`() {
-        loginPresenter.onDestroy()
+    fun `Should stop reading fingerprint`() {
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).stopReadingFingerprint()
 
-        val disposableSize = loginPresenter.disposable.size()
-        assertTrue(disposableSize == 0)
+        verify(goldfinger).cancel()
     }
 
     @Test
@@ -298,7 +438,16 @@ class LoginPresenterTest {
         whenever(preferenceProvider.getSet(PREFS_URLS, emptySet())) doReturn urlSet
         whenever(preferenceProvider.getSet(PREFS_USERS, emptySet())) doReturn userSet
 
-        val (urls, users) = loginPresenter.getAutocompleteData(testingCredentials)
+        val (urls, users) = LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).getAutocompleteData(testingCredentials)
 
         urlSet.forEach {
             assertTrue(urls.contains(it))
@@ -318,22 +467,68 @@ class LoginPresenterTest {
     @Test
     fun `Should handle log out when button is clicked`() {
         whenever(userManager.d2.userModule().logOut()) doReturn Completable.complete()
-        loginPresenter.setUserManager(userManager)
-        loginPresenter.logOut()
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
+        LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        ).logOut()
 
         verify(view).handleLogout()
     }
 
     @Test
-    fun `Should clear INITIAL_SYNC_DONE preference if network is available`() {
+    fun `Should handle successfull response`() {
         val response = Response.success(
             User.builder()
                 .uid("userUid")
                 .build()
         )
-        whenever(view.isNetworkAvailable()) doReturn true
-        loginPresenter.handleResponse(response, "userName", "serverUrl")
-        verify(view, times(1)).isNetworkAvailable()
-        verify(preferenceProvider, times(1)).setValue(Preference.INITIAL_SYNC_DONE, false)
+
+        whenever(userManager.d2) doReturn mock()
+        whenever(userManager.d2.systemInfoModule()) doReturn mock()
+        whenever(userManager.d2.systemInfoModule().systemInfo()) doReturn mock()
+        whenever(userManager.d2.systemInfoModule().systemInfo().blockingGet()) doReturn mock()
+        whenever(
+            userManager.d2.systemInfoModule().systemInfo().blockingGet().version()
+        ) doReturn "1234"
+
+        whenever(userManager.d2.dataStoreModule()) doReturn mock()
+        whenever(userManager.d2.dataStoreModule().localDataStore()) doReturn mock()
+        whenever(
+            userManager.d2.dataStoreModule().localDataStore().value("WasInitialSyncDone")
+        ) doReturn mock()
+        whenever(
+            userManager.d2.dataStoreModule().localDataStore().value("WasInitialSyncDone")
+                .blockingExists()
+        ) doReturn false
+
+        val loginPresenter = LoginViewModel(
+            view,
+            preferenceProvider,
+            schedulers,
+            goldfinger,
+            analyticsHelper,
+            crashReportController,
+            network,
+            userManager
+        )
+        loginPresenter.handleResponse(response)
+
+        verify(view).saveUsersData(true, false)
     }
 }

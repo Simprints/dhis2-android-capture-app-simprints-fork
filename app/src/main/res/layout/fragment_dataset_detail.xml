@@ -30,17 +30,15 @@
                     android:layout_height="match_parent"
                     android:layout_margin="8dp">
 
-                    <ImageView
-                        android:id="@+id/dataSetIcon"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/rounded_square_4dp"
-                        android:padding="4dp"
+                    <androidx.compose.ui.platform.ComposeView
+                        android:id="@+id/composeDataSetIcon"
+                        android:layout_width="wrap_content"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:srcCompat="@drawable/ic_clinical_f_outline"
-                        tools:backgroundTint="?colorPrimary"
-                        tools:tint="@color/white" />
+                        android:layout_height="wrap_content"
+                        tools:layout_width="40dp"
+                        tools:layout_height="40dp"
+                        />
 
                     <TextView
                         android:id="@+id/dataSetStatus"
@@ -52,20 +50,12 @@
                         android:textAlignment="center"
                         android:textColor="@color/textPrimary"
                         android:textSize="9sp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@id/dataSetIcon"
+                        app:layout_constraintTop_toBottomOf="@id/composeDataSetIcon"
                         tools:backgroundTint="@color/green_7ed"
-                        tools:text="Open" />
-
-                    <ImageView
-                        android:id="@+id/sync_status"
-                        style="@style/ActionIcon"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        tools:src="@drawable/ic_sync" />
-
+                        tools:text="Completado" />
 
                     <TextView
                         android:id="@+id/dataSetName"
@@ -75,8 +65,8 @@
                         android:layout_marginStart="8dp"
                         android:textColor="@color/textPrimary"
                         android:textSize="14sp"
-                        app:layout_constraintStart_toEndOf="@id/dataSetIcon"
-                        app:layout_constraintTop_toTopOf="@id/dataSetIcon"
+                        app:layout_constraintStart_toEndOf="@id/composeDataSetIcon"
+                        app:layout_constraintTop_toTopOf="@id/composeDataSetIcon"
                         tools:text="Child Health" />
 
                     <TextView

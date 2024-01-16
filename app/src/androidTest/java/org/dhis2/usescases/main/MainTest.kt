@@ -1,11 +1,15 @@
 package org.dhis2.usescases.main
 
-import android.Manifest
+import androidx.compose.ui.test.junit4.createComposeRule
+import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.ActivityTestRule
 import org.dhis2.usescases.BaseTest
 import org.dhis2.common.filters.filterRobotCommon
+import org.dhis2.usescases.login.loginRobot
 import org.dhis2.usescases.searchte.robot.filterRobot
+import org.dhis2.usescases.settings.settingsRobot
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,9 +20,8 @@ class MainTest : BaseTest() {
     @get:Rule
     val rule = ActivityTestRule(MainActivity::class.java, false, false)
 
-    override fun getPermissionsToBeAccepted(): Array<String> {
-        return arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
-    }
+    @get:Rule
+    val composeTestRule = createComposeRule()
 
     @Throws(Exception::class)
     override fun setUp() {
@@ -29,7 +32,7 @@ class MainTest : BaseTest() {
     fun checkHomeScreenRecyclerviewHasElements() {
         startActivity()
         homeRobot {
-            checkViewIsNotEmpty()
+            checkViewIsNotEmpty(composeTestRule)
         }
     }
 
@@ -42,7 +45,7 @@ class MainTest : BaseTest() {
             clickOnNavigationDrawerMenu()
             clickOnSettings()
             pressBack()
-            checkHomeIsDisplayed()
+            checkHomeIsDisplayed(composeTestRule)
         }
     }
 
@@ -71,27 +74,29 @@ class MainTest : BaseTest() {
     }
 
     @Test
-    fun shouldApplyFilterInProgramThatDoesNotApplyInHome(){
+    @Ignore
+    fun shouldShowDialogToDeleteAccount() {
         setupCredentials()
         startActivity()
-        val programPosition = 3 // This could be any program
 
         homeRobot {
-            openProgramByPosition(programPosition)
+            clickOnNavigationDrawerMenu()
+            clickDeleteAccount()
         }
 
-        filterRobot {
-            clickOnFilter()
-            clickOnEnrollmentDateFilter()
-            clickOnTodayEnrollmentDate()
+        settingsRobot {
+            Thread.sleep(1000)
+            clickOnAcceptDialog()
         }
 
-        homeRobot {
-            pressBack()
+        loginRobot {
+            checkUsernameFieldIsClear()
+            checkPasswordFieldIsClear()
         }
     }
 
     private fun startActivity() {
-        rule.launchActivity(null)
+        val intent = Intent().putExtra(AVOID_SYNC, true)
+        rule.launchActivity(intent)
     }
 }

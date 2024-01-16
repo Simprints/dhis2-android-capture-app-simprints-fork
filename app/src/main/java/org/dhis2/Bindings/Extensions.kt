@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.MutableLiveData
+import java.text.DecimalFormat
 import org.dhis2.App
 import org.dhis2.data.user.UserComponent
 import org.hisp.dhis.android.core.D2
@@ -24,10 +25,19 @@ fun TrackedEntityInstance.profilePicturePath(d2: D2, programUid: String?): Strin
 
     val attrRepository = d2.trackedEntityModule().trackedEntityAttributes()
     val imageAttributes = if (programUid != null) {
-        attrRepository.byValueType().eq(ValueType.IMAGE).blockingGet().map { it.uid() }
+        attrRepository.byValueType().eq(ValueType.IMAGE).blockingGetUids()
     } else {
         attrRepository.byDisplayInListNoProgram().isTrue.byValueType().eq(ValueType.IMAGE)
-            .blockingGet().map { it.uid() }
+            .blockingGetUids()
+    }
+
+    val imageAttributeValues = d2.trackedEntityModule().trackedEntityAttributeValues()
+        .byTrackedEntityInstance().eq(uid())
+        .byTrackedEntityAttribute().`in`(imageAttributes)
+        .blockingGet()
+
+    if (imageAttributeValues.isEmpty()) {
+        return ""
     }
 
     var attributes = d2.trackedEntityModule().trackedEntityTypeAttributes()
@@ -68,17 +78,11 @@ fun TrackedEntityInstance.profilePicturePath(d2: D2, programUid: String?): Strin
             .map { it.trackedEntityAttribute()!!.uid() }
     }
 
-    val attributeValue = if (attributes.isNotEmpty()) {
-        d2.trackedEntityModule().trackedEntityAttributeValues()
-            .byTrackedEntityInstance().eq(uid())
-            .byTrackedEntityAttribute().`in`(attributes[0])
-            .byValue().isNotNull
-            .one().blockingGet()
-    } else {
-        null
+    val attributeValue = attributes.firstOrNull()?.let { attributeUid ->
+        imageAttributeValues.find { it.trackedEntityAttribute() == attributeUid }
     }
 
-    if (attributeValue != null) {
+    if (attributeValue?.value() != null) {
         val fileResource =
             d2.fileResourceModule().fileResources().uid(attributeValue.value()).blockingGet()
         if (fileResource != null) {
@@ -118,6 +122,9 @@ val Int.dp: Int
 
 val Int.px: Int
     get() = (this / Resources.getSystem().displayMetrics.density).toInt()
+
+val Double.decimalFormat: String
+    get() = DecimalFormat("0.##############").format(this)
 
 fun AppCompatActivity.isKeyboardOpened(): Boolean {
     val r = Rect()

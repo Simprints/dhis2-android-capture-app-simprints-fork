@@ -38,13 +38,14 @@ import io.reactivex.processors.BehaviorProcessor
 import io.reactivex.processors.FlowableProcessor
 import io.reactivex.processors.PublishProcessor
 import io.reactivex.schedulers.TestScheduler
+import org.dhis2.commons.data.tuples.Pair
 import org.dhis2.commons.filters.DisableHomeFiltersFromSettingsApp
 import org.dhis2.commons.filters.FilterManager
 import org.dhis2.commons.filters.FilterManager.PeriodRequest
 import org.dhis2.commons.filters.Filters
 import org.dhis2.commons.filters.data.FilterRepository
+import org.dhis2.commons.matomo.MatomoAnalyticsController
 import org.dhis2.data.schedulers.TestSchedulerProvider
-import org.dhis2.data.tuples.Pair
 import org.hisp.dhis.android.core.category.CategoryCombo
 import org.hisp.dhis.android.core.category.CategoryOptionCombo
 import org.junit.Before
@@ -60,6 +61,7 @@ class DataSetDetailPresenterTest {
     private val filterManager: FilterManager = mock()
     private val filterRepository: FilterRepository = mock()
     private val disableHomeFilters: DisableHomeFiltersFromSettingsApp = mock()
+    private val matomoAnalyticsController: MatomoAnalyticsController = mock()
 
     @Before
     fun setUp() {
@@ -69,7 +71,8 @@ class DataSetDetailPresenterTest {
             scheduler,
             filterManager,
             filterRepository,
-            disableHomeFilters
+            disableHomeFilters,
+            matomoAnalyticsController
         )
     }
 

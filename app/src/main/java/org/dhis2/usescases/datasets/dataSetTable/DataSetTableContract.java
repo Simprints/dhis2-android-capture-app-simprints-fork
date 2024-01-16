@@ -1,9 +1,8 @@
 package org.dhis2.usescases.datasets.dataSetTable;
 
+import org.dhis2.usescases.datasets.dataSetTable.dataSetSection.DataSetSection;
 import org.dhis2.usescases.general.AbstractActivityContracts;
 import org.dhis2.utils.validationrules.Violation;
-import org.hisp.dhis.android.core.dataset.DataSet;
-import org.hisp.dhis.android.core.period.Period;
 
 import java.util.List;
 
@@ -13,17 +12,17 @@ public class DataSetTableContract {
 
     public interface View extends AbstractActivityContracts.View {
 
-        void setSections(List<String> sections);
+        void startInputEdition();
+
+        void finishInputEdition();
+
+        void setSections(List<DataSetSection> sections, String sectionToOpenUid);
 
         Boolean accessDataWrite();
 
         String getDataSetUid();
 
-        String getOrgUnitName();
-
-        void renderDetails(DataSet dataSet, String catcomboName, Period period, boolean isComplete);
-
-        Observable<Object> observeSaveButtonClicks();
+        void renderDetails(DataSetRenderDetails dataSetRenderDetails);
 
         void showMandatoryMessage(boolean isMandatoryFields);
 
@@ -50,41 +49,7 @@ public class DataSetTableContract {
         void saveAndFinish();
 
         boolean isErrorBottomSheetShowing();
+
+        void selectOpenedSection(int sectionIndexToOpen);
     }
-
-    public interface Presenter extends AbstractActivityContracts.Presenter {
-
-        void onBackClick();
-
-        void init(String orgUnitUid, String periodTypeName, String catCombo, String periodFinalDate, String periodId);
-
-        String getOrgUnitUid();
-
-        String getPeriodTypeName();
-
-        String getPeriodFinalDate();
-
-        String getCatCombo();
-
-        String getPeriodId();
-
-        void executeValidationRules();
-
-        void completeDataSet();
-
-        void collapseExpandBottomSheet();
-
-        void closeBottomSheet();
-
-        void onCompleteBottomSheet();
-
-        boolean isValidationMandatoryToComplete();
-
-        void reopenDataSet();
-
-        boolean shouldAllowCompleteAnyway();
-
-        boolean isComplete();
-    }
-
 }

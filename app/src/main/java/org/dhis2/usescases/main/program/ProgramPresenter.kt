@@ -1,53 +1,62 @@
 package org.dhis2.usescases.main.program
 
+import androidx.lifecycle.MutableLiveData
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.processors.PublishProcessor
+import java.util.concurrent.TimeUnit
 import org.dhis2.commons.filters.FilterManager
-import org.dhis2.commons.prefs.PreferenceProvider
+import org.dhis2.commons.matomo.Actions.Companion.SYNC_BTN
+import org.dhis2.commons.matomo.Categories.Companion.HOME
+import org.dhis2.commons.matomo.Labels.Companion.CLICK_ON
+import org.dhis2.commons.matomo.MatomoAnalyticsController
 import org.dhis2.commons.schedulers.SchedulerProvider
-import org.dhis2.utils.Constants.PROGRAM_THEME
-import org.dhis2.utils.analytics.matomo.Actions.Companion.SYNC_BTN
-import org.dhis2.utils.analytics.matomo.Categories.Companion.HOME
-import org.dhis2.utils.analytics.matomo.Labels.Companion.CLICK_ON
-import org.dhis2.utils.analytics.matomo.MatomoAnalyticsController
+import org.dhis2.usescases.biometrics.SelectBiometricsConfig
+import org.dhis2.data.service.SyncStatusController
+import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit
+import org.hisp.dhis.android.core.program.ProgramType
 import timber.log.Timber
 
 class ProgramPresenter internal constructor(
     private val view: ProgramView,
     private val programRepository: ProgramRepository,
     private val schedulerProvider: SchedulerProvider,
-    private val preferenceProvider: PreferenceProvider,
     private val filterManager: FilterManager,
-    private val matomoAnalyticsController: MatomoAnalyticsController
+    private val matomoAnalyticsController: MatomoAnalyticsController,
+    private val syncStatusController: SyncStatusController,
+    private val identifyProgramType: IdentifyProgramType,
+    private val stockManagementMapper: StockManagementMapper,
+    private val selectBiometricsConfig: SelectBiometricsConfig
 ) {
 
+    private val programs = MutableLiveData<List<ProgramViewModel>>(emptyList())
+    private val refreshData = PublishProcessor.create<Unit>()
     var disposable: CompositeDisposable = CompositeDisposable()
 
     fun init() {
         val applyFiler = PublishProcessor.create<FilterManager>()
+        programRepository.clearCache()
 
         disposable.add(
             applyFiler
                 .switchMap {
-                    programRepository.programModels().onErrorReturn {
-                        arrayListOf()
-                    }
-                        .mergeWith(
-                            programRepository.aggregatesModels().onErrorReturn {
-                                arrayListOf()
-                            }
+                    refreshData.debounce(
+                        500,
+                        TimeUnit.MILLISECONDS,
+                        schedulerProvider.io()
+                    ).startWith(Unit).switchMap {
+                        programRepository.homeItems(
+                            syncStatusController.observeDownloadProcess().value!!
                         )
-                        .flatMapIterable { data -> data }
-                        .sorted { p1, p2 -> p1.title().compareTo(p2.title(), ignoreCase = true) }
-                        .toList().toFlowable()
-                        .subscribeOn(schedulerProvider.io())
-                        .onErrorReturn { arrayListOf() }
+                    }
                 }
                 .subscribeOn(schedulerProvider.io())
                 .observeOn(schedulerProvider.ui())
                 .subscribe(
-                    { programs -> view.swapProgramModelData(programs) },
+                    { programs ->
+                        this.programs.postValue(programs)
+                        view.swapProgramModelData(programs)
+                    },
                     { throwable -> Timber.d(throwable) },
                     { Timber.tag("INIT DATA").d("LOADING ENDED") }
                 )
@@ -79,23 +88,41 @@ class ProgramPresenter internal constructor(
     }
 
     fun onSyncStatusClick(program: ProgramViewModel) {
-        val programTitle = "$CLICK_ON${program.title()}"
+        val programTitle = "$CLICK_ON${program.title}"
         matomoAnalyticsController.trackEvent(HOME, SYNC_BTN, programTitle)
         view.showSyncDialog(program)
     }
 
     fun updateProgramQueries() {
+        programRepository.clearCache()
         filterManager.publishData()
     }
 
-    fun onItemClick(programModel: ProgramViewModel, programTheme: Int) {
-        if (programTheme != -1) {
-            preferenceProvider.setValue(PROGRAM_THEME, programTheme)
-        } else {
-            preferenceProvider.removeValue(PROGRAM_THEME)
+    fun onItemClick(programModel: ProgramViewModel) {
+        when (getHomeItemType(programModel)) {
+            HomeItemType.PROGRAM_STOCK ->
+                view.navigateToStockManagement(stockManagementMapper.map(programModel))
+            else ->
+                view.navigateTo(programModel)
         }
 
-        view.navigateTo(programModel)
+        if (BIOMETRICS_ENABLED) {
+            selectBiometricsConfig(programModel.uid)
+        }
+    }
+
+    private fun getHomeItemType(programModel: ProgramViewModel): HomeItemType {
+        return when (programModel.programType) {
+            ProgramType.WITH_REGISTRATION.name -> {
+                identifyProgramType(programModel.uid)
+            }
+            ProgramType.WITHOUT_REGISTRATION.name -> {
+                HomeItemType.EVENTS
+            }
+            else -> {
+                HomeItemType.DATA_SET
+            }
+        }
     }
 
     fun showDescription(description: String?) {
@@ -119,5 +146,13 @@ class ProgramPresenter internal constructor(
 
     fun setOrgUnitFilters(selectedOrgUnits: List<OrganisationUnit>) {
         filterManager.addOrgUnits(selectedOrgUnits)
+    }
+
+    fun programs() = programs
+
+    fun downloadState() = syncStatusController.observeDownloadProcess()
+
+    fun setIsDownloading() {
+        refreshData.onNext(Unit)
     }
 }

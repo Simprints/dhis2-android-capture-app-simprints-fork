@@ -16,14 +16,14 @@ import androidx.test.espresso.matcher.ViewMatchers.withParent
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import org.dhis2.R
 import org.dhis2.common.BaseRobot
-import org.dhis2.common.matchers.RecyclerviewMatchers.Companion.allElementsHave
 import org.dhis2.common.matchers.RecyclerviewMatchers.Companion.allElementsWithHolderTypeHave
 import org.dhis2.common.matchers.RecyclerviewMatchers.Companion.dateIsInRange
 import org.dhis2.common.matchers.RecyclerviewMatchers.Companion.hasItem
 import org.dhis2.common.viewactions.clickChildViewWithId
+import org.dhis2.common.viewactions.scrollToBottomRecyclerView
 import org.dhis2.commons.filters.FilterHolder
 import org.dhis2.usescases.searchTrackEntity.adapters.SearchTEViewHolder
-import org.hamcrest.Matchers.allOf
+import org.hamcrest.CoreMatchers.allOf
 
 fun filterRobot(filterRobot: FilterRobot.() -> Unit) {
     FilterRobot().apply {
@@ -58,6 +58,8 @@ class FilterRobot : BaseRobot() {
     }
 
     fun clickOnFilterOverdueOption() {
+        onView(withId(R.id.filterRecyclerLayout))
+            .perform(scrollToBottomRecyclerView())
         onView(withId(R.id.stateOverdue)).perform(click())
     }
 
@@ -107,7 +109,7 @@ class FilterRobot : BaseRobot() {
 
     fun checkTEIWithOrgUnit(orgUnit: String) {
         onView(withId(R.id.scrollView))
-            .check(matches(allElementsHave(hasDescendant(withText(orgUnit)))))
+            .check(matches(allElementsWithHolderTypeHave(SearchTEViewHolder::class.java,hasDescendant(withText(orgUnit)))))
     }
 
     fun checkTEINotSync() {

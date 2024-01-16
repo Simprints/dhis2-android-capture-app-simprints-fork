@@ -1,5 +1,7 @@
 package org.dhis2.data.service;
 
+import static org.dhis2.utils.analytics.AnalyticsConstants.DATA_TIME;
+
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -15,8 +17,9 @@ import androidx.work.WorkerParameters;
 
 import org.dhis2.App;
 import org.dhis2.R;
+import org.dhis2.commons.network.NetworkUtils;
 import org.dhis2.commons.prefs.PreferenceProvider;
-import org.dhis2.utils.Constants;
+import org.dhis2.commons.Constants;
 import org.dhis2.utils.DateUtils;
 
 import java.util.Calendar;
@@ -25,8 +28,6 @@ import java.util.Objects;
 import javax.inject.Inject;
 
 import timber.log.Timber;
-
-import static org.dhis2.utils.analytics.AnalyticsConstants.DATA_TIME;
 
 public class SyncDataWorker extends Worker {
 
@@ -48,8 +49,11 @@ public class SyncDataWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        Objects.requireNonNull(((App) getApplicationContext()).userComponent())
+                .plus(new SyncDataWorkerModule())
+                .inject(this);
 
-        Objects.requireNonNull(((App) getApplicationContext()).userComponent()).plus(new SyncDataWorkerModule()).inject(this);
+        presenter.initSyncControllerMap();
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
@@ -62,51 +66,54 @@ public class SyncDataWorker extends Worker {
 
         long init = System.currentTimeMillis();
 
-        try {
-            presenter.uploadResources();
-        } catch (Exception e) {
-            Timber.e(e);
-        }
-
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                "Syncing events",
+                getApplicationContext().getString(R.string.syncing_events),
                 25);
 
         try {
             presenter.syncAndDownloadEvents();
         } catch (Exception e) {
+            if (!new NetworkUtils(getApplicationContext()).isOnline()) {
+                presenter.setNetworkUnavailable();
+            }
             Timber.e(e);
             isEventOk = false;
         }
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                "Syncing tracked entities",
+                getApplicationContext().getString(R.string.syncing_teis),
                 50);
 
         try {
             presenter.syncAndDownloadTeis();
         } catch (Exception e) {
+            if (!new NetworkUtils(getApplicationContext()).isOnline()) {
+                presenter.setNetworkUnavailable();
+            }
             Timber.e(e);
             isTeiOk = false;
         }
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                "Syncing data sets",
+                getApplicationContext().getString(R.string.syncing_data_sets),
                 75);
 
         try {
             presenter.syncAndDownloadDataValues();
         } catch (Exception e) {
+            if (!new NetworkUtils(getApplicationContext()).isOnline()) {
+                presenter.setNetworkUnavailable();
+            }
             Timber.e(e);
             isDataValue = false;
         }
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                "Syncing resources",
+                getApplicationContext().getString(R.string.syncing_resources),
                 90);
 
         try {
@@ -117,7 +124,7 @@ public class SyncDataWorker extends Worker {
 
         triggerNotification(
                 getApplicationContext().getString(R.string.app_name),
-                "Syncing done",
+                getApplicationContext().getString(R.string.syncing_done),
                 100);
 
         presenter.logTimeToFinish(System.currentTimeMillis() - init, DATA_TIME);
@@ -132,6 +139,8 @@ public class SyncDataWorker extends Worker {
         cancelNotification();
 
         presenter.startPeriodicDataWork();
+
+        presenter.finishSync();
 
         return Result.success(createOutputData(true));
     }

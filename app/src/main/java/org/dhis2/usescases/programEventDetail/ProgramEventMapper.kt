@@ -3,13 +3,14 @@ package org.dhis2.usescases.programEventDetail
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
-import org.dhis2.Bindings.userFriendlyValue
+import org.dhis2.commons.bindings.userFriendlyValue
+import org.dhis2.commons.data.EventViewModel
+import org.dhis2.commons.data.EventViewModelType
+import org.dhis2.commons.data.ProgramEventViewModel
+import org.dhis2.commons.data.tuples.Pair
+import org.dhis2.commons.reporting.CrashReportController
 import org.dhis2.data.dhislogic.DhisPeriodUtils
-import org.dhis2.data.tuples.Pair
-import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventViewModel
-import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventViewModelType
 import org.dhis2.utils.DateUtils
-import org.dhis2.utils.reporting.CrashReportController
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.helpers.UidsHelper
 import org.hisp.dhis.android.core.arch.repositories.scope.RepositoryScope
@@ -34,6 +35,8 @@ class ProgramEventMapper @Inject constructor(
             "Event: $event"
         )
 
+        val eventDate = event.eventDate() ?: event.dueDate()
+
         return EventViewModel(
             EventViewModelType.EVENT,
             programStage,
@@ -48,10 +51,13 @@ class ProgramEventMapper @Inject constructor(
             catComboName = getCatComboName(event.attributeOptionCombo()),
             dataElementValues = getEventValues(event.uid(), event.programStage()!!),
             groupedByStage = true,
-            displayDate = periodUtils.getPeriodUIString(
-                programStage.periodType() ?: PeriodType.Daily,
-                event.eventDate() ?: event.dueDate()!!, Locale.getDefault()
-            )
+            displayDate = eventDate?.let {
+                periodUtils.getPeriodUIString(
+                    programStage.periodType() ?: PeriodType.Daily,
+                    it,
+                    Locale.getDefault()
+                )
+            }
         )
     }
 
@@ -98,7 +104,7 @@ class ProgramEventMapper @Inject constructor(
     }
 
     fun eventsToProgramEvents(events: List<Event>): List<ProgramEventViewModel> {
-        return events.map { event -> eventToProgramEvent(event) }
+        return events.filter { it.geometry() != null }.map { event -> eventToProgramEvent(event) }
     }
 
     private fun getOrgUnitName(orgUnitUid: String?) =
@@ -192,11 +198,10 @@ class ProgramEventMapper @Inject constructor(
     private fun getDataElement(dataElement: String?) =
         d2.dataElementModule().dataElements().uid(dataElement).blockingGet()
 
-    private fun getStageSections(programStage: String?) =
-        d2.programModule().programStageSections()
-            .byProgramStageUid().eq(programStage)
-            .withDataElements()
-            .blockingGet()
+    private fun getStageSections(programStage: String?) = d2.programModule().programStageSections()
+        .byProgramStageUid().eq(programStage)
+        .withDataElements()
+        .blockingGet()
 
     private fun getCategoryOptionCombo(attributeOptionCombo: String?) =
         d2.categoryModule().categoryOptionCombos().uid(attributeOptionCombo).blockingGet()

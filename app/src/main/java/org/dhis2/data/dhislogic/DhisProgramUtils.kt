@@ -13,6 +13,26 @@ import org.hisp.dhis.android.core.trackedentity.TrackedEntityInstanceCollectionR
 
 class DhisProgramUtils @Inject constructor(val d2: D2) {
 
+    fun getServerState(): State {
+        val states = d2.programModule().programs().blockingGet().map {
+            getProgramState(it)
+        }.plus(
+            d2.dataSetModule().dataSetInstanceSummaries().blockingGet().map {
+                it.state()
+            }
+        ).distinct()
+
+        return when {
+            states.contains(State.ERROR) -> State.ERROR
+            states.contains(State.WARNING) -> State.WARNING
+            states.contains(State.TO_POST) -> State.TO_POST
+            states.contains(State.TO_UPDATE) -> State.TO_UPDATE
+            states.contains(State.SENT_VIA_SMS) or states.contains(State.SYNCED_VIA_SMS) ->
+                State.SENT_VIA_SMS
+            else -> State.SYNCED
+        }
+    }
+
     fun getProgramState(program: Program): State {
         return when (program.programType()) {
             ProgramType.WITH_REGISTRATION -> getTrackerProgramState(program)
@@ -41,22 +61,35 @@ class DhisProgramUtils @Inject constructor(val d2: D2) {
             .byProgram().eq(program.uid())
 
         return when {
-            hasTeiWithErrorOrWarningState(teiRepository, enrollmentRepository) -> State.WARNING
+            hasTeiWithErrorState(teiRepository, enrollmentRepository) -> State.ERROR
+            hasTeiWithWarningState(teiRepository, enrollmentRepository) -> State.WARNING
             hasTeiWithSMSState(teiRepository) -> State.SENT_VIA_SMS
             hasTeiWithNotSyncedStateOrDeleted(teiRepository) -> State.TO_UPDATE
             else -> State.SYNCED
         }
     }
 
-    private fun hasTeiWithErrorOrWarningState(
+    private fun hasTeiWithWarningState(
         teiRepository: TrackedEntityInstanceCollectionRepository,
         enrollmentRepository: EnrollmentCollectionRepository
     ): Boolean {
         return teiRepository
             .byDeleted().isFalse
-            .byAggregatedSyncState().`in`(State.ERROR, State.WARNING)
+            .byAggregatedSyncState().`in`(State.WARNING)
             .blockingGet().isNotEmpty() ||
-            enrollmentRepository.byAggregatedSyncState().`in`(State.ERROR, State.WARNING)
+            enrollmentRepository.byAggregatedSyncState().`in`(State.WARNING)
+                .blockingGet().isNotEmpty()
+    }
+
+    private fun hasTeiWithErrorState(
+        teiRepository: TrackedEntityInstanceCollectionRepository,
+        enrollmentRepository: EnrollmentCollectionRepository
+    ): Boolean {
+        return teiRepository
+            .byDeleted().isFalse
+            .byAggregatedSyncState().`in`(State.ERROR)
+            .blockingGet().isNotEmpty() ||
+            enrollmentRepository.byAggregatedSyncState().`in`(State.ERROR)
                 .blockingGet().isNotEmpty()
     }
 
@@ -84,7 +117,8 @@ class DhisProgramUtils @Inject constructor(val d2: D2) {
         val eventRepository = d2.eventModule().events()
             .byProgramUid().eq(program.uid())
         return when {
-            hasEventWithErrorState(eventRepository) -> State.WARNING
+            hasEventWithErrorState(eventRepository) -> State.ERROR
+            hasEventWithWarningState(eventRepository) -> State.WARNING
             hasEventWithSMSState(eventRepository) -> State.SENT_VIA_SMS
             hasEventWithNotSyncedStateOrDeleted(eventRepository) -> State.TO_UPDATE
             else -> State.SYNCED
@@ -94,7 +128,14 @@ class DhisProgramUtils @Inject constructor(val d2: D2) {
     private fun hasEventWithErrorState(eventRepository: EventCollectionRepository): Boolean {
         return eventRepository
             .byDeleted().isFalse
-            .byAggregatedSyncState().`in`(State.ERROR, State.WARNING)
+            .byAggregatedSyncState().`in`(State.ERROR)
+            .blockingGet().isNotEmpty()
+    }
+
+    private fun hasEventWithWarningState(eventRepository: EventCollectionRepository): Boolean {
+        return eventRepository
+            .byDeleted().isFalse
+            .byAggregatedSyncState().`in`(State.WARNING)
             .blockingGet().isNotEmpty()
     }
 

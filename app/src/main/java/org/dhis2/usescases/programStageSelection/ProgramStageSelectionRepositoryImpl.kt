@@ -4,9 +4,9 @@ import io.reactivex.Flowable
 import io.reactivex.Single
 import io.reactivex.functions.Function5
 import java.util.ArrayList
-import org.dhis2.Bindings.toRuleAttributeValue
-import org.dhis2.data.forms.RulesRepository
-import org.dhis2.utils.EventCreationType
+import org.dhis2.commons.data.EventCreationType
+import org.dhis2.form.bindings.toRuleAttributeValue
+import org.dhis2.form.data.RulesRepository
 import org.dhis2.utils.Result
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.enrollment.Enrollment
@@ -124,8 +124,10 @@ class ProgramStageSelectionRepositoryImpl internal constructor(
                 var repository = d2.programModule().programStages().byProgramUid().eq(
                     programUid
                 )
-                if (eventCreationType == EventCreationType.SCHEDULE.name) repository =
-                    repository.byHideDueDate().eq(false)
+                if (eventCreationType == EventCreationType.SCHEDULE.name) {
+                    repository =
+                        repository.byHideDueDate().eq(false)
+                }
                 repository.get().toFlowable()
                     .flatMapIterable { stages: List<ProgramStage>? -> stages }
                     .filter { programStage: ProgramStage ->

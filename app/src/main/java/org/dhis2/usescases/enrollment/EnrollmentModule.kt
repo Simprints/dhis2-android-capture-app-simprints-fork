@@ -5,33 +5,44 @@ import dagger.Module
 import dagger.Provides
 import io.reactivex.processors.FlowableProcessor
 import io.reactivex.processors.PublishProcessor
-import org.dhis2.Bindings.valueTypeHintMap
-import org.dhis2.R
+import org.dhis2.commons.data.EntryMode
 import org.dhis2.commons.di.dagger.PerActivity
+import org.dhis2.commons.matomo.MatomoAnalyticsController
+import org.dhis2.commons.network.NetworkUtils
+import org.dhis2.commons.reporting.CrashReportController
+import org.dhis2.commons.resources.ResourceManager
 import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.data.dhislogic.DhisEnrollmentUtils
-import org.dhis2.data.forms.RulesRepository
-import org.dhis2.data.forms.dataentry.DataEntryStore
-import org.dhis2.data.forms.dataentry.EnrollmentRepository
-import org.dhis2.data.forms.dataentry.FormUiModelColorFactoryImpl
+import org.dhis2.data.forms.dataentry.SearchTEIRepository
+import org.dhis2.data.forms.dataentry.SearchTEIRepositoryImpl
 import org.dhis2.data.forms.dataentry.ValueStore
 import org.dhis2.data.forms.dataentry.ValueStoreImpl
-import org.dhis2.data.forms.dataentry.fields.FieldViewModelFactory
-import org.dhis2.data.forms.dataentry.fields.FieldViewModelFactoryImpl
-import org.dhis2.data.forms.dataentry.fields.LayoutProviderImpl
-import org.dhis2.form.data.FormRepository
-import org.dhis2.form.data.FormRepositoryImpl
+import org.dhis2.form.data.EnrollmentRepository
+import org.dhis2.form.data.RulesRepository
+import org.dhis2.form.data.metadata.OptionSetConfiguration
+import org.dhis2.form.data.metadata.OrgUnitConfiguration
+import org.dhis2.form.model.EnrollmentMode
 import org.dhis2.form.model.RowAction
+import org.dhis2.form.ui.FieldViewModelFactory
+import org.dhis2.form.ui.FieldViewModelFactoryImpl
+import org.dhis2.form.ui.LayoutProviderImpl
 import org.dhis2.form.ui.provider.DisplayNameProviderImpl
+import org.dhis2.form.ui.provider.EnrollmentFormLabelsProvider
+import org.dhis2.form.ui.provider.EnrollmentResultDialogUiProvider
 import org.dhis2.form.ui.provider.HintProviderImpl
-import org.dhis2.form.ui.style.FormUiColorFactory
+import org.dhis2.form.ui.provider.KeyboardActionProviderImpl
+import org.dhis2.form.ui.provider.LegendValueProviderImpl
+import org.dhis2.form.ui.provider.UiEventTypesProviderImpl
+import org.dhis2.form.ui.provider.UiStyleProviderImpl
+import org.dhis2.form.ui.style.FormUiModelColorFactoryImpl
+import org.dhis2.form.ui.style.LongTextUiColorFactoryImpl
 import org.dhis2.form.ui.validation.FieldErrorMessageProvider
+import org.dhis2.usescases.teiDashboard.TeiAttributesProvider
 import org.dhis2.utils.analytics.AnalyticsHelper
-import org.dhis2.utils.analytics.matomo.MatomoAnalyticsController
-import org.dhis2.utils.reporting.CrashReportController
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.repositories.`object`.ReadOnlyOneObjectRepositoryFinalImpl
 import org.hisp.dhis.android.core.enrollment.EnrollmentObjectRepository
+import org.hisp.dhis.android.core.event.EventCollectionRepository
 import org.hisp.dhis.android.core.program.Program
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityInstanceObjectRepository
 
@@ -41,7 +52,7 @@ class EnrollmentModule(
     val enrollmentUid: String,
     val programUid: String,
     private val enrollmentMode: EnrollmentActivity.EnrollmentMode,
-    val activityContext: Context
+    private val activityContext: Context
 ) {
 
     @Provides
@@ -68,64 +79,60 @@ class EnrollmentModule(
 
     @Provides
     @PerActivity
-    fun provideDataEntrytRepository(
-        context: Context,
+    fun provideDataEntryRepository(
         d2: D2,
-        dhisEnrollmentUtils: DhisEnrollmentUtils,
-        modelFactory: FieldViewModelFactory
+        modelFactory: FieldViewModelFactory,
+        enrollmentFormLabelsProvider: EnrollmentFormLabelsProvider
     ): EnrollmentRepository {
-        val enrollmentDataSectionLabel = context.getString(R.string.enrollment_data_section_label)
-        val singleSectionLabel = context.getString(R.string.enrollment_single_section_label)
-        val enrollmentOrgUnitLabel = context.getString(R.string.enrolling_ou)
-        val teiCoordinatesLabel = context.getString(R.string.tei_coordinates)
-        val enrollmentCoordinatesLabel = context.getString(R.string.enrollment_coordinates)
-        val reservedValueWarning = context.getString(R.string.no_reserved_values)
-        val enrollmentDateDefaultLabel = context.getString(R.string.enrollmment_date)
-        val incidentDateDefaultLabel = context.getString(R.string.incident_date)
         return EnrollmentRepository(
-            modelFactory,
-            enrollmentUid,
-            d2,
-            dhisEnrollmentUtils,
-            enrollmentMode,
-            enrollmentDataSectionLabel,
-            singleSectionLabel,
-            enrollmentOrgUnitLabel,
-            teiCoordinatesLabel,
-            enrollmentCoordinatesLabel,
-            reservedValueWarning,
-            enrollmentDateDefaultLabel,
-            incidentDateDefaultLabel
+            fieldFactory = modelFactory,
+            enrollmentUid = enrollmentUid,
+            d2 = d2,
+            enrollmentMode = EnrollmentMode.valueOf(enrollmentMode.name),
+            enrollmentFormLabelsProvider = enrollmentFormLabelsProvider
         )
+    }
+
+    @Provides
+    @PerActivity
+    fun provideEnrollmentFormLabelsProvider(resourceManager: ResourceManager) =
+        EnrollmentFormLabelsProvider(resourceManager)
+
+    @Provides
+    @PerActivity
+    fun provideEventRepository(d2: D2): EventCollectionRepository {
+        return d2.eventModule().events()
     }
 
     @Provides
     @PerActivity
     fun fieldFactory(
         context: Context,
-        colorFactory: FormUiColorFactory,
-        d2: D2
+        d2: D2,
+        resourceManager: ResourceManager
     ): FieldViewModelFactory {
         return FieldViewModelFactoryImpl(
-            context.valueTypeHintMap(),
             false,
-            colorFactory,
+            UiStyleProviderImpl(
+                FormUiModelColorFactoryImpl(activityContext, true),
+                LongTextUiColorFactoryImpl(activityContext, true),
+                true
+            ),
             LayoutProviderImpl(),
             HintProviderImpl(context),
-            DisplayNameProviderImpl(d2)
+            DisplayNameProviderImpl(
+                OptionSetConfiguration(d2),
+                OrgUnitConfiguration(d2)
+            ),
+            UiEventTypesProviderImpl(),
+            KeyboardActionProviderImpl(),
+            LegendValueProviderImpl(d2, resourceManager)
         )
     }
 
     @Provides
     @PerActivity
-    fun provideFormUiColorFactory(): FormUiColorFactory {
-        return FormUiModelColorFactoryImpl(activityContext, true)
-    }
-
-    @Provides
-    @PerActivity
     fun providePresenter(
-        context: Context,
         d2: D2,
         enrollmentObjectRepository: EnrollmentObjectRepository,
         dataEntryRepository: EnrollmentRepository,
@@ -133,10 +140,10 @@ class EnrollmentModule(
         programRepository: ReadOnlyOneObjectRepositoryFinalImpl<Program>,
         schedulerProvider: SchedulerProvider,
         enrollmentFormRepository: EnrollmentFormRepository,
-        valueStore: ValueStore,
         analyticsHelper: AnalyticsHelper,
-        fieldViewModelFactory: FieldViewModelFactory,
-        matomoAnalyticsController: MatomoAnalyticsController
+        matomoAnalyticsController: MatomoAnalyticsController,
+        eventCollectionRepository: EventCollectionRepository,
+        teiAttributesProvider: TeiAttributesProvider
     ): EnrollmentPresenterImpl {
         return EnrollmentPresenterImpl(
             enrollmentView,
@@ -147,11 +154,10 @@ class EnrollmentModule(
             programRepository,
             schedulerProvider,
             enrollmentFormRepository,
-            valueStore,
             analyticsHelper,
-            context.getString(R.string.field_is_mandatory),
-            fieldViewModelFactory.sectionProcessor(),
-            matomoAnalyticsController
+            matomoAnalyticsController,
+            eventCollectionRepository,
+            teiAttributesProvider
         )
     }
 
@@ -166,15 +172,29 @@ class EnrollmentModule(
     fun valueStore(
         d2: D2,
         enrollmentRepository: EnrollmentObjectRepository,
-        crashReportController: CrashReportController
+        crashReportController: CrashReportController,
+        networkUtils: NetworkUtils,
+        searchTEIRepository: SearchTEIRepository,
+        resourceManager: ResourceManager
     ): ValueStore {
+        val fieldErrorMessageProvider = FieldErrorMessageProvider(activityContext)
         return ValueStoreImpl(
             d2,
             enrollmentRepository.blockingGet().trackedEntityInstance()!!,
-            DataEntryStore.EntryMode.ATTR,
+            EntryMode.ATTR,
             DhisEnrollmentUtils(d2),
-            crashReportController
+            crashReportController,
+            networkUtils,
+            searchTEIRepository,
+            fieldErrorMessageProvider,
+            resourceManager
         )
+    }
+
+    @Provides
+    @PerActivity
+    internal fun searchRepository(d2: D2): SearchTEIRepository {
+        return SearchTEIRepositoryImpl(d2, DhisEnrollmentUtils(d2))
     }
 
     @Provides
@@ -205,22 +225,15 @@ class EnrollmentModule(
 
     @Provides
     @PerActivity
-    fun provideEnrollmentFormRepository(
-        d2: D2,
-        enrollmentRepository: EnrollmentObjectRepository,
-        crashReportController: CrashReportController
-    ): FormRepository {
-        return FormRepositoryImpl(
-            ValueStoreImpl(
-                d2,
-                enrollmentRepository.blockingGet().trackedEntityInstance()!!,
-                DataEntryStore.EntryMode.ATTR,
-                DhisEnrollmentUtils(d2),
-                enrollmentRepository,
-                crashReportController
-            ),
-            FieldErrorMessageProvider(activityContext),
-            DisplayNameProviderImpl(d2)
-        )
+    fun provideDataEntryResultDialogProvider(
+        resourceManager: ResourceManager
+    ): EnrollmentResultDialogUiProvider {
+        return EnrollmentResultDialogUiProvider(resourceManager)
+    }
+
+    @Provides
+    @PerActivity
+    fun providesTeiAttributesProvider(d2: D2): TeiAttributesProvider {
+        return TeiAttributesProvider(d2)
     }
 }

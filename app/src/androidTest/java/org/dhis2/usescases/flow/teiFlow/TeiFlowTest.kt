@@ -1,16 +1,15 @@
 package org.dhis2.usescases.flow.teiFlow
 
 import android.content.Intent
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.ActivityTestRule
-import org.dhis2.commons.prefs.Preference
 import org.dhis2.usescases.BaseTest
 import org.dhis2.usescases.searchTrackEntity.SearchTEActivity
 import org.dhis2.usescases.teiDashboard.TeiDashboardMobileActivity
 import org.dhis2.usescases.flow.teiFlow.entity.DateRegistrationUIModel
 import org.dhis2.usescases.flow.teiFlow.entity.EnrollmentListUIModel
 import org.dhis2.usescases.flow.teiFlow.entity.RegisterTEIUIModel
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,12 +26,14 @@ class TeiFlowTest: BaseTest() {
     @get:Rule
     val ruleSearch = ActivityTestRule(SearchTEActivity::class.java, false, false)
 
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
     private val dateRegistration = createFirstSpecificDate()
     private val dateEnrollment = createEnrollmentDate()
     private val currentDate = getCurrentDate()
 
     @Test
-    @Ignore
     fun shouldEnrollToSameProgramAfterClosedIt() {
         val totalEventsPerEnrollment = 3
         val pastProgramPosition = 4
@@ -46,7 +47,7 @@ class TeiFlowTest: BaseTest() {
         teiFlowRobot {
             registerTEI(registerTeiDetails)
             closeEnrollmentAndCheckEvents(totalEventsPerEnrollment)
-            enrollToProgram(ADULT_WOMAN_PROGRAM)
+            enrollToProgram(composeTestRule, ADULT_WOMAN_PROGRAM)
             checkActiveAndPastEnrollmentDetails(enrollmentListDetails)
             checkPastEventsAreClosed(totalEventsPerEnrollment, pastProgramPosition)
         }

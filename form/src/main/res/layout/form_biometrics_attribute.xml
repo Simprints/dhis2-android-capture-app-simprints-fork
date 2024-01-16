@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <import type="android.view.View" />
+
+        <variable
+            name="statusText"
+            type="java.lang.String" />
+
+        <variable
+            name="buttonText"
+            type="java.lang.String" />
+
+    </data>
+
+
+    <LinearLayout
+        android:id="@+id/rootView"
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        >
+
+
+        <include layout="@layout/form_biometrics_register" />
+
+    </LinearLayout>
+
+</layout>

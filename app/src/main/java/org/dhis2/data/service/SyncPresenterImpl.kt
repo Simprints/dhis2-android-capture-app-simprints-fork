@@ -24,13 +24,15 @@ import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.data.service.workManager.WorkManagerController
 import org.dhis2.data.service.workManager.WorkerItem
 import org.dhis2.data.service.workManager.WorkerType
+import org.dhis2.usescases.biometrics.BIOMETRICS_ENABLED
 import org.dhis2.usescases.biometrics.BiometricsConfigRepository
-import org.dhis2.utils.Constants
+
 import org.dhis2.utils.DateUtils
 import org.dhis2.utils.analytics.AnalyticsHelper
 import org.dhis2.utils.analytics.matomo.DEFAULT_EXTERNAL_TRACKER_NAME
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.call.D2Progress
+import org.hisp.dhis.android.core.arch.call.D2ProgressStatus
 import org.hisp.dhis.android.core.common.State
 import org.hisp.dhis.android.core.imports.TrackerImportConflict
 import org.hisp.dhis.android.core.program.ProgramType
@@ -38,6 +40,7 @@ import org.hisp.dhis.android.core.settings.GeneralSettings
 import org.hisp.dhis.android.core.settings.LimitScope
 import org.hisp.dhis.android.core.settings.ProgramSettings
 import org.hisp.dhis.android.core.systeminfo.DHISVersion
+import org.hisp.dhis.android.core.tracker.exporter.TrackerD2Progress
 import timber.log.Timber
 
 class SyncPresenterImpl(
@@ -45,12 +48,41 @@ class SyncPresenterImpl(
     private val preferences: PreferenceProvider,
     private val workManagerController: WorkManagerController,
     private val analyticsHelper: AnalyticsHelper,
+    private val syncStatusController: SyncStatusController,
+    private val syncRepository: SyncRepository,
     private val biometricsConfigRepository: BiometricsConfigRepository
 ) : SyncPresenter {
 
+    override fun initSyncControllerMap() {
+        Completable.fromCallable {
+            val programMap: Map<String, D2ProgressStatus> =
+                d2.programModule().programs().blockingGetUids().map { programUid ->
+                    programUid to D2ProgressStatus(false, null)
+                }.toMap()
+            val aggregateMap: Map<String, D2ProgressStatus> =
+                d2.dataSetModule().dataSets().blockingGetUids().associateWith {
+                    D2ProgressStatus(false, null)
+                }
+            val allMap = programMap.toMutableMap().apply {
+                putAll(aggregateMap)
+            }.toMap()
+            syncStatusController.initDownloadProcess(allMap)
+        }.blockingAwait()
+    }
+
+    override fun finishSync() {
+        syncStatusController.finishSync()
+    }
+
+    override fun setNetworkUnavailable() {
+        syncStatusController.onNetworkUnavailable()
+    }
+
     override fun syncAndDownloadEvents() {
         val (eventLimit, limitByOU, limitByProgram) = getDownloadLimits()
-
+        val programEventUids = d2.programModule().programs()
+            .byProgramType().eq(ProgramType.WITHOUT_REGISTRATION)
+            .blockingGetUids()
         Completable.fromObservable(d2.eventModule().events().upload())
             .andThen(
                 Completable.fromObservable(
@@ -60,7 +92,23 @@ class SyncPresenterImpl(
                         .limitByOrgunit(limitByOU)
                         .limitByProgram(limitByProgram)
                         .download()
+                        .doOnNext { d2Progress ->
+                            syncStatusController.updateDownloadProcess(
+                                d2Progress.programs().filter { entry ->
+                                    programEventUids.contains(entry.key)
+                                }
+                            )
+                        }
                 )
+                    .doOnError {
+                        Timber.d("error while downloading Events")
+                    }
+                    .onErrorComplete()
+                    .doOnComplete {
+                        syncStatusController.finishDownloadingEvents(
+                            programEventUids
+                        )
+                    }
             ).blockingAwait()
     }
 
@@ -99,6 +147,10 @@ class SyncPresenterImpl(
             it == LimitScope.PER_PROGRAM || it == LimitScope.PER_OU_AND_PROGRAM
         } ?: preferences.getBoolean(LIMIT_BY_PROGRAM, false)
 
+        val trackerProgramUids = d2.programModule().programs()
+            .byProgramType().eq(ProgramType.WITH_REGISTRATION)
+            .blockingGetUids()
+
         Completable.fromObservable(d2.trackedEntityModule().trackedEntityInstances().upload())
             .andThen(
                 Completable.fromObservable(
@@ -113,10 +165,20 @@ class SyncPresenterImpl(
                             val callsDone = data.doneCalls().size
                             val totalCalls = data.totalCalls()
                             Timber.d("$percentage% $callsDone/$totalCalls")
+                            syncStatusController.updateDownloadProcess(
+                                data.programs().filter { entry ->
+                                    trackerProgramUids.contains(entry.key)
+                                }
+                            )
                         }
                 )
                     .doOnError { Timber.d("error while downloading TEIs") }
                     .onErrorComplete()
+                    .doOnComplete {
+                        syncStatusController.finishDownloadingTracker(
+                            trackerProgramUids
+                        )
+                    }
             )
             .blockingAwait()
     }
@@ -130,7 +192,11 @@ class SyncPresenterImpl(
                     )
                 )
                 .andThen(
-                    Completable.fromObservable(d2.aggregatedModule().data().download())
+                    Completable.fromObservable(
+                        d2.aggregatedModule().data().download().doOnNext {
+                            syncStatusController.updateDownloadProcess(it.dataSets())
+                        }
+                    )
                 ).blockingAwait()
         }
     }
@@ -145,9 +211,14 @@ class SyncPresenterImpl(
                 .doOnComplete {
                     updateProyectAnalytics()
                     setUpSMS()
-                    downloadBiometricsConfig()
+
+                    if (BIOMETRICS_ENABLED) {
+                        downloadBiometricsConfig()
+                    }
                 }
 
+        ).andThen(
+            d2.mapsModule().mapLayersDownloader().downloadMetadata()
         ).blockingAwait()
     }
 
@@ -155,12 +226,12 @@ class SyncPresenterImpl(
         val globalSettings = getSettings()
 
         globalSettings?.let {
-            if (!globalSettings.numberSmsToSend().isNullOrEmpty()) {
-                d2.smsModule().configCase().setGatewayNumber(globalSettings.numberSmsToSend())
+            if (!globalSettings.smsGateway().isNullOrEmpty()) {
+                d2.smsModule().configCase().setGatewayNumber(globalSettings.smsGateway())
                     .andThen(
-                        if (!globalSettings.numberSmsConfirmation().isNullOrEmpty()) {
+                        if (!globalSettings.smsResultSender().isNullOrEmpty()) {
                             d2.smsModule().configCase()
-                                .setConfirmationSenderNumber(globalSettings.numberSmsConfirmation())
+                                .setConfirmationSenderNumber(globalSettings.smsResultSender())
                         } else {
                             Completable.complete()
                         }
@@ -173,14 +244,12 @@ class SyncPresenterImpl(
         }
     }
 
-    override fun uploadResources() {
-        Completable.fromObservable(d2.fileResourceModule().fileResources().upload())
-            .blockingAwait()
-    }
-
     override fun downloadResources() {
         if (d2.systemInfoModule().versionManager().isGreaterThan(DHISVersion.V2_32)) {
-            d2.fileResourceModule().blockingDownload()
+            syncStatusController.initDownloadMedia()
+            Completable.fromObservable(
+                d2.fileResourceModule().fileResourceDownloader().download()
+            ).blockingAwait()
         }
     }
 
@@ -188,8 +257,10 @@ class SyncPresenterImpl(
         val maxNumberOfValuesToReserve = getSettings()?.let {
             it.reservedValues() ?: 100
         } ?: 100
-        d2.trackedEntityModule().reservedValueManager()
-            .blockingDownloadAllReservedValues(maxNumberOfValuesToReserve)
+        Completable.fromObservable(
+            d2.trackedEntityModule().reservedValueManager()
+                .downloadAllReservedValues(maxNumberOfValuesToReserve)
+        ).blockingAwait()
     }
 
     override fun checkSyncStatus(): SyncResult {
@@ -218,7 +289,7 @@ class SyncPresenterImpl(
         return SyncResult.ERROR
     }
 
-    override fun syncGranularEvent(eventUid: String): Observable<D2Progress> {
+    override fun syncGranularEvent(eventUid: String): Observable<TrackerD2Progress> {
         Completable.fromObservable(d2.eventModule().events().byUid().eq(eventUid).upload())
             .blockingAwait()
         return d2.eventModule().eventDownloader().byUid().eq(eventUid).download()
@@ -230,6 +301,7 @@ class SyncPresenterImpl(
         return if (!checkSyncProgramStatus(programUid)) {
             ListenableWorker.Result.failure()
         } else {
+            syncStatusController.updateSingleProgramToSuccess(programUid)
             ListenableWorker.Result.success()
         }
     }
@@ -334,11 +406,17 @@ class SyncPresenterImpl(
             }
     }
 
-    override fun syncGranularTEI(uid: String): Observable<D2Progress> {
+    override fun syncGranularTEI(uid: String): Observable<TrackerD2Progress> {
+        val enrollment = d2.enrollmentModule().enrollments().uid(uid).blockingGet()
         Completable.fromObservable(
-            d2.trackedEntityModule().trackedEntityInstances().byUid().eq(uid).upload()
+            d2.trackedEntityModule().trackedEntityInstances()
+                .byUid().eq(enrollment.trackedEntityInstance()!!)
+                .byProgramUids(listOf(enrollment.program()!!))
+                .upload()
         ).blockingAwait()
-        return d2.trackedEntityModule().trackedEntityInstanceDownloader().byUid().eq(uid)
+        return d2.trackedEntityModule().trackedEntityInstanceDownloader()
+            .byUid().eq(enrollment.trackedEntityInstance())
+            .byProgramUid(enrollment.program()!!)
             .download()
     }
 
@@ -411,21 +489,19 @@ class SyncPresenterImpl(
     }
 
     override fun checkSyncTEIStatus(uid: String): SyncResult {
-        val teiOk = d2.trackedEntityModule().trackedEntityInstances()
-            .byUid().eq(uid)
-            .byAggregatedSyncState().notIn(State.SYNCED, State.RELATIONSHIP)
-            .blockingGet().isEmpty()
+        val teiOk =
+            syncRepository.getTeiByNotInStates(uid, listOf(State.SYNCED, State.RELATIONSHIP))
+        val teiEventsOk =
+            syncRepository.getEventsFromEnrollmentByNotInSyncState(uid, listOf(State.SYNCED))
 
-        if (teiOk) {
+        if (teiOk.isEmpty() && teiEventsOk.isEmpty()) {
             return SyncResult.SYNC
         }
 
-        val anyTeiToPostOrToUpdate = d2.trackedEntityModule().trackedEntityInstances()
-            .byUid().eq(uid)
-            .byAggregatedSyncState().`in`(State.TO_POST, State.TO_UPDATE)
-            .blockingGet().isNotEmpty()
+        val anyTeiToPostOrToUpdate =
+            syncRepository.getTeiByInStates(uid, listOf(State.TO_POST, State.TO_UPDATE))
 
-        if (anyTeiToPostOrToUpdate) {
+        if (anyTeiToPostOrToUpdate.isNotEmpty()) {
             return SyncResult.INCOMPLETE
         }
 
@@ -481,6 +557,12 @@ class SyncPresenterImpl(
 
         trackerImportConflicts =
             d2.importModule().trackerImportConflicts().byEventUid().eq(uid).blockingGet()
+        if (trackerImportConflicts != null && trackerImportConflicts.isNotEmpty()) {
+            return trackerImportConflicts
+        }
+
+        trackerImportConflicts =
+            d2.importModule().trackerImportConflicts().byEnrollmentUid().eq(uid).blockingGet()
         return if (trackerImportConflicts != null && trackerImportConflicts.isNotEmpty()) {
             trackerImportConflicts
         } else {

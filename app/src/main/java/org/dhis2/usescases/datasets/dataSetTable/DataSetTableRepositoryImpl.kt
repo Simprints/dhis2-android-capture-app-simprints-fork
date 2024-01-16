@@ -7,7 +7,9 @@ import io.reactivex.processors.FlowableProcessor
 import io.reactivex.processors.PublishProcessor
 import java.util.Date
 import javax.inject.Singleton
-import org.dhis2.data.tuples.Pair
+import org.dhis2.commons.data.tuples.Pair
+import org.dhis2.commons.resources.ResourceManager
+import org.dhis2.usescases.datasets.dataSetTable.dataSetSection.DataSetSection
 import org.dhis2.utils.validationrules.DataToReview
 import org.dhis2.utils.validationrules.ValidationRuleResult
 import org.dhis2.utils.validationrules.Violation
@@ -30,7 +32,8 @@ class DataSetTableRepositoryImpl(
     private val dataSetUid: String,
     private val periodId: String,
     private val orgUnitUid: String,
-    private val catOptCombo: String
+    private val catOptCombo: String,
+    private val resourceManager: ResourceManager
 ) {
 
     private val dataSetInstanceProcessor: FlowableProcessor<Unit> = PublishProcessor.create()
@@ -45,6 +48,12 @@ class DataSetTableRepositoryImpl(
 
     fun getPeriod(): Single<Period> {
         return d2.periodModule().periodHelper().getPeriodForPeriodId(periodId)
+    }
+
+    fun getOrgUnit(): Single<OrganisationUnit> {
+        return d2.organisationUnitModule().organisationUnits()
+            .uid(orgUnitUid)
+            .get()
     }
 
     fun dataSetInstance(): Flowable<DataSetInstance> {
@@ -97,15 +106,44 @@ class DataSetTableRepositoryImpl(
         ).toFlowable()
     }
 
-    fun getSections(): Flowable<List<String>> {
+    fun getSections(): Flowable<List<DataSetSection>> {
         return d2.dataSetModule().sections().byDataSetUid().eq(dataSetUid).get()
             .map { sections ->
                 if (sections.isEmpty()) {
-                    arrayListOf("NO_SECTION")
+                    arrayListOf(
+                        DataSetSection(
+                            "NO_SECTION",
+                            resourceManager.defaultEmptyDataSetSectionLabel()
+                        )
+                    )
                 } else {
-                    sections.map { it.displayName()!! }
+                    sections.map { DataSetSection(it.uid(), it.displayName()) }
                 }
             }.toFlowable()
+    }
+
+    fun getSectionIndexWithErrors(defaultSectionIndex: Int = 0): Int {
+        val sections = d2.dataSetModule().sections()
+            .byDataSetUid().eq(dataSetUid)
+            .withDataElements()
+            .blockingGet().associate {
+                it.uid() to it.dataElements()?.map { dataElement -> dataElement.uid() }
+            }
+
+        val sectionWithError = d2.dataValueModule().dataValueConflicts()
+            .byDataSet(dataSetUid)
+            .byPeriod().eq(periodId)
+            .byOrganisationUnitUid().eq(orgUnitUid)
+            .byAttributeOptionCombo().eq(catOptCombo)
+            .blockingGet()?.mapNotNull { dataValueConflict ->
+                dataValueConflict.dataElement()?.let { dataElementUid ->
+                    sections.filter { it.value?.contains(dataElementUid) == true }.keys
+                }
+            }?.flatten()
+
+        return sectionWithError?.firstOrNull()?.let {
+            sections.keys.indexOf(it)
+        } ?: defaultSectionIndex
     }
 
     fun dataSetStatus(): Flowable<Boolean> {
@@ -135,23 +173,31 @@ class DataSetTableRepositoryImpl(
             if (state == State.SYNCED && dscr != null) {
                 state = dscr.state()
             }
-            if (state != null) Flowable.just<State>(
-                state
-            ) else Flowable.empty()
+            if (state != null) {
+                Flowable.just<State>(
+                    state
+                )
+            } else {
+                Flowable.empty()
+            }
         }
     }
 
-    fun getCatComboName(catcomboUid: String): Flowable<String> {
+    fun getCatComboName(): Flowable<String> {
         return Flowable.fromCallable {
-            d2.categoryModule().categoryOptionCombos().uid(catcomboUid).blockingGet()
+            d2.categoryModule().categoryOptionCombos().uid(catOptCombo).blockingGet()
                 .displayName()
         }
     }
 
     fun getCatOptComboFromOptionList(catOpts: List<String>): String {
-        return if (catOpts.isEmpty()) d2.categoryModule().categoryOptionCombos().byDisplayName()
-            .like("default").one().blockingGet().uid() else d2.categoryModule()
-            .categoryOptionCombos().byCategoryOptions(catOpts).one().blockingGet().uid()
+        return if (catOpts.isEmpty()) {
+            d2.categoryModule().categoryOptionCombos().byDisplayName()
+                .like("default").one().blockingGet().uid()
+        } else {
+            d2.categoryModule()
+                .categoryOptionCombos().byCategoryOptions(catOpts).one().blockingGet().uid()
+        }
     }
 
     fun getDataSetCatComboName(): Single<String> {
@@ -347,9 +393,9 @@ class DataSetTableRepositoryImpl(
                 ) {
                     d2.dataValueModule().dataValues()
                         .value(periodId, orgUnitUid, de.uid(), catOptCombo.uid(), this.catOptCombo)
-                        .blockingGet().value() ?: "?"
+                        .blockingGet().value() ?: "-"
                 } else {
-                    "?"
+                    "-"
                 }
                 val isFromDefaultCatCombo = d2.categoryModule().categoryCombos()
                     .uid(catOptCombo.categoryCombo()?.uid()).blockingGet().isDefault == true
@@ -377,5 +423,11 @@ class DataSetTableRepositoryImpl(
             .byDeleted().isFalse
             .isEmpty
             .map { isEmpty -> !isEmpty }
+    }
+
+    fun hasDataElementDecoration(): Boolean {
+        return d2.dataSetModule().dataSets().uid(dataSetUid)
+            .blockingGet()
+            .dataElementDecoration() == true
     }
 }

@@ -21,7 +21,7 @@ const val PIN_DIALOG_TAG: String = "PINDIALOG"
 class PinDialog(
     val mode: Mode,
     private val canBeClosed: Boolean,
-    private val unlockCallback: (Boolean) -> Unit,
+    private val unlockCallback: () -> Unit,
     private val forgotPinCallback: () -> Unit
 ) : DialogFragment(), PinView {
 
@@ -33,6 +33,8 @@ class PinDialog(
     enum class Mode {
         SET, ASK
     }
+
+    private var pinAttempts = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,11 +86,21 @@ class PinDialog(
                     blockSession()
                 }
                 Mode.ASK ->
-                    if (presenter.unlockSession(it)) {
-                        unlockCallback.invoke(true)
-                    } else {
-                        Toast.makeText(context, "Wrong pin", Toast.LENGTH_LONG).show()
-                    }
+                    presenter.unlockSession(
+                        it,
+                        attempts = pinAttempts,
+                        onPinCorrect = unlockCallback,
+                        onError = {
+                            pinAttempts += 1
+                            Toast.makeText(
+                                context,
+                                getString(R.string.wrong_pin),
+                                Toast.LENGTH_LONG
+                            ).show()
+                            binding.pinLockView.resetPinLockView()
+                        },
+                        onTwoManyAttempts = { recoverPin() }
+                    )
             }
         }
 
@@ -97,7 +109,8 @@ class PinDialog(
 
     private fun blockSession() {
         Handler().postDelayed(
-            { Process.killProcess(Process.myPid()) }, 1500
+            { Process.killProcess(Process.myPid()) },
+            1500
         )
     }
 

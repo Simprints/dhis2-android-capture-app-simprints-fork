@@ -1,11 +1,12 @@
 package org.dhis2;
 
+import static org.dhis2.utils.analytics.AnalyticsConstants.DATA_STORE_ANALYTICS_PERMISSION_KEY;
+
 import android.content.Context;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.OnLifecycleEvent;
@@ -13,45 +14,47 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.multidex.MultiDex;
 import androidx.multidex.MultiDexApplication;
 
-import org.dhis2.commons.dialogs.calendarpicker.di.CalendarPickerComponent;
-import org.dhis2.commons.dialogs.calendarpicker.di.CalendarPickerModule;
 import org.dhis2.commons.di.dagger.PerActivity;
 import org.dhis2.commons.di.dagger.PerServer;
 import org.dhis2.commons.di.dagger.PerUser;
+import org.dhis2.commons.dialogs.calendarpicker.di.CalendarPickerComponent;
+import org.dhis2.commons.dialogs.calendarpicker.di.CalendarPickerModule;
 import org.dhis2.commons.featureconfig.di.FeatureConfigActivityComponent;
 import org.dhis2.commons.featureconfig.di.FeatureConfigActivityModule;
 import org.dhis2.commons.featureconfig.di.FeatureConfigModule;
+import org.dhis2.commons.filters.data.FilterPresenter;
+import org.dhis2.commons.network.NetworkUtilsModule;
 import org.dhis2.commons.orgunitselector.OUTreeComponent;
 import org.dhis2.commons.orgunitselector.OUTreeModule;
-import org.dhis2.commons.filters.data.FilterPresenter;
 import org.dhis2.commons.prefs.Preference;
 import org.dhis2.commons.prefs.PreferenceModule;
-import org.dhis2.data.appinspector.AppInspector;
-import org.dhis2.data.dispatcher.DispatcherModule;
+import org.dhis2.commons.reporting.CrashReportModule;
 import org.dhis2.commons.schedulers.SchedulerModule;
 import org.dhis2.commons.schedulers.SchedulersProviderImpl;
+import org.dhis2.commons.sync.SyncComponentProvider;
+import org.dhis2.data.appinspector.AppInspector;
+import org.dhis2.data.dispatcher.DispatcherModule;
+import org.dhis2.data.server.SSLContextInitializer;
 import org.dhis2.data.server.ServerComponent;
 import org.dhis2.data.server.ServerModule;
 import org.dhis2.data.server.UserManager;
 import org.dhis2.data.service.workManager.WorkManagerModule;
 import org.dhis2.data.user.UserComponent;
 import org.dhis2.data.user.UserModule;
-import org.dhis2.uicomponents.map.MapController;
+import org.dhis2.maps.MapController;
+import org.dhis2.usescases.crash.CrashActivity;
 import org.dhis2.usescases.login.LoginComponent;
-import org.dhis2.usescases.login.LoginContracts;
 import org.dhis2.usescases.login.LoginModule;
 import org.dhis2.usescases.teiDashboard.TeiDashboardComponent;
 import org.dhis2.usescases.teiDashboard.TeiDashboardModule;
 import org.dhis2.utils.analytics.AnalyticsModule;
-import org.dhis2.utils.reporting.CrashReportController;
-import org.dhis2.utils.reporting.CrashReportControllerImpl;
-import org.dhis2.utils.reporting.CrashReportModule;
+import org.dhis2.utils.granularsync.SyncStatusDialogProvider;
 import org.dhis2.utils.session.PinModule;
 import org.dhis2.utils.session.SessionComponent;
 import org.dhis2.utils.timber.DebugTree;
 import org.dhis2.utils.timber.ReleaseTree;
-import org.hisp.dhis.android.core.D2;
 import org.hisp.dhis.android.core.D2Manager;
+import org.hisp.dhis.android.core.datastore.KeyValuePair;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -60,6 +63,7 @@ import java.net.SocketException;
 import javax.inject.Singleton;
 
 import cat.ereza.customactivityoncrash.config.CaocConfig;
+import dagger.hilt.android.HiltAndroidApp;
 import dhis2.org.analytics.charts.ui.di.AnalyticsFragmentComponent;
 import dhis2.org.analytics.charts.ui.di.AnalyticsFragmentModule;
 import io.reactivex.Scheduler;
@@ -67,12 +71,12 @@ import io.reactivex.android.plugins.RxAndroidPlugins;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.exceptions.UndeliverableException;
 import io.reactivex.plugins.RxJavaPlugins;
+import io.sentry.SentryLevel;
+import io.sentry.android.core.SentryAndroid;
 import timber.log.Timber;
 
+@HiltAndroidApp
 public class App extends MultiDexApplication implements Components, LifecycleObserver {
-    static {
-        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
-    }
 
     @NonNull
     @Singleton
@@ -105,23 +109,55 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
     public void onCreate() {
         super.onCreate();
 
+
         ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
 
         appInspector = new AppInspector(this).init();
 
-        MapController.Companion.init(this, BuildConfig.MAPBOX_ACCESS_TOKEN);
+        MapController.Companion.init(this);
 
         setUpAppComponent();
         Timber.plant(BuildConfig.DEBUG ? new DebugTree() : new ReleaseTree(appComponent.injectCrashReportController()));
 
+        setUpSecurityProvider();
         setUpServerComponent();
+        initCrashController();
         setUpRxPlugin();
         initCustomCrashActivity();
     }
 
+    public void initCrashController() {
+        if (areTrackingPermissionGranted()) {
+            SentryAndroid.init(this, options -> {
+                options.setDsn(BuildConfig.SENTRY_DSN);
+
+                // Add a callback that will be used before the event is sent to Sentry.
+                // With this callback, you can modify the event or, when returning null, also discard the event.
+                options.setBeforeSend((event, hint) -> {
+                    if (SentryLevel.DEBUG.equals(event.getLevel()))
+                        return null;
+                    else
+                        return event;
+                });
+                options.setEnvironment(BuildConfig.DEBUG ? "debug" : "production");
+                options.setDebug(BuildConfig.DEBUG);
+                // Enable view hierarchy for crashes
+                options.setAttachViewHierarchy(true);
+                // Enable the performance API by setting a sample-rate
+                options.setTracesSampleRate(BuildConfig.DEBUG ? 1.0 : 0.1);
+                // Enable profiling when starting transactions
+                options.setProfilesSampleRate(BuildConfig.DEBUG ? 1.0 : 0.1);
+            });
+        }
+    }
+
+    private void setUpSecurityProvider() {
+        SSLContextInitializer.INSTANCE.initializeSSLContext(this);
+    }
+
     private void initCustomCrashActivity() {
         CaocConfig.Builder.create()
-                .errorDrawable(R.drawable.ic_dhis)
+                .errorActivity(CrashActivity.class)
                 .apply();
     }
 
@@ -137,16 +173,8 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
     }
 
     protected void setUpServerComponent() {
-        boolean isLogged = false;
-        try {
-            D2 d2Configuration = D2Manager.blockingInstantiateD2(ServerModule.getD2Configuration(this));
-            isLogged = d2Configuration.userModule().isLogged().blockingGet();
-        } catch (Exception e) {
-            appComponent.injectCrashReportController().trackError(e, e.getMessage());
-        }
         serverComponent = appComponent.plus(new ServerModule());
-
-        if (isLogged)
+        if (Boolean.TRUE.equals(serverComponent.userManager().isUserLoggedIn().blockingFirst()))
             setUpUserComponent();
     }
 
@@ -169,9 +197,11 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
                 .schedulerModule(new SchedulerModule(new SchedulersProviderImpl()))
                 .analyticsModule(new AnalyticsModule())
                 .preferenceModule(new PreferenceModule())
+                .networkUtilsModule(new NetworkUtilsModule())
                 .workManagerController(new WorkManagerModule())
                 .coroutineDispatchers(new DispatcherModule())
                 .crashReportModule(new CrashReportModule())
+                .customDispatcher(new CustomDispatcherModule())
                 .featureConfigModule(new FeatureConfigModule());
     }
 
@@ -187,8 +217,8 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
 
     @NonNull
     @Override
-    public LoginComponent createLoginComponent(LoginContracts.View view) {
-        return (loginComponent = appComponent.plus(new LoginModule(view)));
+    public LoginComponent createLoginComponent(LoginModule loginModule) {
+        return (loginComponent = appComponent.plus(loginModule));
     }
 
     @Nullable
@@ -208,10 +238,9 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
 
     @Override
     public ServerComponent createServerComponent() {
-        if (serverComponent == null)
-            serverComponent = appComponent.plus(new ServerModule());
+        if (!D2Manager.INSTANCE.isD2Instantiated())
+            setUpServerComponent();
         return serverComponent;
-
     }
 
     @Nullable
@@ -225,6 +254,7 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
         serverComponent = null;
     }
 
+    @Nullable
     public ServerComponent getServerComponent() {
         return serverComponent;
     }
@@ -275,7 +305,7 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
 
     @NotNull
     public SessionComponent createSessionComponent(PinModule pinModule) {
-        return (sessionComponent = appComponent.plus(pinModule));
+        return (sessionComponent = userComponent.plus(pinModule));
     }
 
     public void releaseSessionComponent() {
@@ -355,5 +385,23 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
     @Override
     public OUTreeComponent provideOUTreeComponent(@NotNull OUTreeModule module) {
         return serverComponent.plus(module);
+    }
+
+
+    @NonNull
+    @Override
+    public SyncComponentProvider getSyncComponentProvider() {
+        return new SyncStatusDialogProvider();
+    }
+
+    private boolean areTrackingPermissionGranted() {
+        boolean isUserLoggedIn = serverComponent != null &&
+                serverComponent.userManager().isUserLoggedIn().blockingFirst();
+        if (!D2Manager.isD2Instantiated() || !isUserLoggedIn) {
+            return false;
+        }
+        KeyValuePair granted = D2Manager.getD2().dataStoreModule().localDataStore()
+                .value(DATA_STORE_ANALYTICS_PERMISSION_KEY).blockingGet();
+        return granted != null && Boolean.parseBoolean(granted.value());
     }
 }

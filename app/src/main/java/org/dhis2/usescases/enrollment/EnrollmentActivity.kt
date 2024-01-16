@@ -6,8 +6,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.widget.EditText
-import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.databinding.DataBindingUtil
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CircleCrop
@@ -15,39 +14,36 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.dhis2.App
 import org.dhis2.R
-import org.dhis2.commons.dialogs.AlertBottomDialog
+import org.dhis2.commons.Constants
+import org.dhis2.commons.Constants.ENROLLMENT_UID
+import org.dhis2.commons.Constants.PROGRAM_UID
+import org.dhis2.commons.Constants.TEI_UID
+import org.dhis2.commons.data.TeiAttributesInfo
+import org.dhis2.commons.dialogs.imagedetail.ImageDetailBottomDialog
 import org.dhis2.data.biometrics.BiometricsClientFactory
 import org.dhis2.data.biometrics.RegisterResult
-import org.dhis2.data.forms.dataentry.FormView
-import org.dhis2.data.forms.dataentry.fields.display.DisplayViewModel
-import org.dhis2.data.location.LocationProvider
 import org.dhis2.databinding.EnrollmentActivityBinding
-import org.dhis2.form.data.FormRepository
 import org.dhis2.form.data.GeometryController
 import org.dhis2.form.data.GeometryParserImpl
-import org.dhis2.form.model.DispatcherProvider
-import org.dhis2.form.model.FieldUiModel
-import org.dhis2.uicomponents.map.views.MapSelectorActivity
-import org.dhis2.usescases.biometrics.BIOMETRICS_ENROLL_LAST_REQUEST
-import org.dhis2.usescases.biometrics.BIOMETRICS_ENROLL_REQUEST
+import org.dhis2.form.model.EnrollmentRecords
+import org.dhis2.form.ui.FormView
+import org.dhis2.form.ui.provider.EnrollmentResultDialogUiProvider
+import org.dhis2.maps.views.MapSelectorActivity
+import org.dhis2.ui.dialogs.bottomsheet.BottomSheetDialog
+import org.dhis2.ui.dialogs.bottomsheet.BottomSheetDialogUiModel
+import org.dhis2.ui.dialogs.bottomsheet.DialogButtonStyle
+import org.dhis2.usescases.events.ScheduledEventActivity
+import org.dhis2.commons.biometrics.BIOMETRICS_ENROLL_LAST_REQUEST
+import org.dhis2.commons.biometrics.BIOMETRICS_ENROLL_REQUEST
+import org.dhis2.commons.dialogs.AlertBottomDialog
+import org.dhis2.form.data.DataIntegrityCheckResult
 import org.dhis2.usescases.biometrics.duplicates.BiometricsDuplicatesDialog
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.EventCaptureActivity
 import org.dhis2.usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity
 import org.dhis2.usescases.general.ActivityGlobalAbstract
 import org.dhis2.usescases.teiDashboard.TeiDashboardMobileActivity
-import org.dhis2.utils.Constants
-import org.dhis2.utils.Constants.CAMERA_REQUEST
-import org.dhis2.utils.Constants.ENROLLMENT_UID
-import org.dhis2.utils.Constants.GALLERY_REQUEST
-import org.dhis2.utils.Constants.PROGRAM_UID
-import org.dhis2.utils.Constants.TEI_UID
 import org.dhis2.utils.EventMode
-import org.dhis2.utils.FileResourcesUtil
-import org.dhis2.utils.ImageUtils
-import org.dhis2.utils.RulesUtilsProviderConfigurationError
-import org.dhis2.utils.customviews.ImageDetailBottomDialog
-import org.dhis2.utils.toMessage
-import org.hisp.dhis.android.core.arch.helpers.FileResourceDirectoryHelper
+import org.dhis2.utils.granularsync.OPEN_ERROR_LOCATION
 import org.hisp.dhis.android.core.common.FeatureType
 import org.hisp.dhis.android.core.enrollment.EnrollmentStatus
 import java.io.File
@@ -64,13 +60,7 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
     lateinit var presenter: EnrollmentPresenterImpl
 
     @Inject
-    lateinit var formRepository: FormRepository
-
-    @Inject
-    lateinit var locationProvider: LocationProvider
-
-    @Inject
-    lateinit var dispatchers: DispatcherProvider
+    lateinit var enrollmentResultDialogUiProvider: EnrollmentResultDialogUiProvider
 
     lateinit var binding: EnrollmentActivityBinding
     lateinit var mode: EnrollmentMode
@@ -83,7 +73,6 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
         const val RQ_ENROLLMENT_GEOMETRY = 1023
         const val RQ_INCIDENT_GEOMETRY = 1024
         const val RQ_EVENT = 1025
-        const val RQ_GO_BACK = 1026
 
         fun getIntent(
             context: Context,
@@ -97,9 +86,6 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
             intent.putExtra(PROGRAM_UID_EXTRA, programUid)
             intent.putExtra(MODE_EXTRA, enrollmentMode.name)
             intent.putExtra(FOR_RELATIONSHIP, forRelationship)
-            if (forRelationship == true) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT)
-            }
             return intent
         }
     }
@@ -111,6 +97,7 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
         val programUid = intent.getStringExtra(PROGRAM_UID_EXTRA) ?: ""
         val enrollmentMode = intent.getStringExtra(MODE_EXTRA)?.let { EnrollmentMode.valueOf(it) }
             ?: EnrollmentMode.NEW
+        val openErrorLocation = intent.getBooleanExtra(OPEN_ERROR_LOCATION, false)
         (applicationContext as App).userComponent()!!.plus(
             EnrollmentModule(
                 this,
@@ -122,18 +109,34 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
         ).inject(this)
 
         formView = FormView.Builder()
-            .repository(formRepository)
             .locationProvider(locationProvider)
-            .dispatcher(dispatchers)
             .onItemChangeListener { action -> presenter.updateFields(action) }
             .onLoadingListener { loading ->
                 if (loading) {
                     showProgress()
                 } else {
                     hideProgress()
+                    presenter.showOrHideSaveButton()
                 }
             }
+            .onFinishDataEntry {
+                presenter.checkIfBiometricValueValid()
+                presenter.finish(mode)
+            }
+            .resultDialogUiProvider(enrollmentResultDialogUiProvider)
             .factory(supportFragmentManager)
+            .setRecords(
+                EnrollmentRecords(
+                    enrollmentUid = enrollmentUid,
+                    enrollmentMode = org.dhis2.form.model.EnrollmentMode.valueOf(
+                        enrollmentMode.name
+                    )
+                )
+            )
+            .openErrorLocation(openErrorLocation)
+            .onFieldsLoadedListener {
+                presenter.onFieldsLoaded(it)
+            }
             .build()
 
         super.onCreate(savedInstanceState)
@@ -181,41 +184,9 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
                             FeatureType.valueOfFeatureType(
                                 data.getStringExtra(MapSelectorActivity.LOCATION_TYPE_EXTRA)
                             ),
-                            data.getStringExtra(MapSelectorActivity.DATA_EXTRA)!!, requestCode
+                            data.getStringExtra(MapSelectorActivity.DATA_EXTRA)!!,
+                            requestCode
                         )
-                    }
-                }
-                GALLERY_REQUEST -> {
-                    try {
-                        val imageUri = data?.data
-                        presenter.saveFile(
-                            uuid,
-                            FileResourcesUtil.getFileFromGallery(this, imageUri).path
-                        )
-                        presenter.updateFields()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        Toast.makeText(
-                            this, getString(R.string.something_wrong), Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-                CAMERA_REQUEST -> {
-                    val imageFile = File(
-                        FileResourceDirectoryHelper.getFileResourceDirectory(this),
-                        "tempFile.png"
-                    )
-
-                    val file = ImageUtils().rotateImage(this, imageFile)
-
-                    try {
-                        presenter.saveFile(uuid, if (file.exists()) file.path else null)
-                        presenter.updateFields()
-                    } catch (e: Exception) {
-                        crashReportController.logException(e)
-                        Toast.makeText(
-                            this, getString(R.string.something_wrong), Toast.LENGTH_LONG
-                        ).show()
                     }
                 }
                 BIOMETRICS_ENROLL_REQUEST -> {
@@ -259,7 +230,10 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
     }
 
     override fun openEvent(eventUid: String) {
-        if (presenter.openInitial(eventUid)) {
+        if (presenter.isEventScheduleOrSkipped(eventUid)) {
+            val scheduleEventIntent = ScheduledEventActivity.getIntent(this, eventUid)
+            openEventForResult.launch(scheduleEventIntent)
+        } else if (presenter.openInitial(eventUid)) {
             val bundle = EventInitialActivity.getBundle(
                 presenter.getProgram().uid(),
                 eventUid,
@@ -292,6 +266,12 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
         }
     }
 
+    private val openEventForResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        openDashboard(presenter.getEnrollment()!!.uid()!!)
+    }
+
     override fun openDashboard(enrollmentUid: String) {
         if (forRelationship) {
             val intent = Intent()
@@ -307,34 +287,6 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
         }
     }
 
-    override fun showMissingMandatoryFieldsMessage(
-        emptyMandatoryFields: MutableMap<String, String>
-    ) {
-        AlertBottomDialog.instance
-            .setTitle(getString(R.string.unable_to_save))
-            .setMessage(getString(R.string.missing_mandatory_fields))
-            .setFieldsToDisplay(emptyMandatoryFields.keys.toList())
-            .show(supportFragmentManager, AlertBottomDialog::class.java.simpleName)
-    }
-
-    override fun showErrorFieldsMessage(errorFields: List<String>) {
-        AlertBottomDialog.instance
-            .setTitle(getString(R.string.unable_to_save))
-            .setMessage(getString(R.string.field_errors))
-            .setFieldsToDisplay(errorFields)
-            .show(supportFragmentManager, AlertBottomDialog::class.java.simpleName)
-    }
-
-    override fun showWarningFieldsMessage(warningFields: List<String>) {
-        AlertBottomDialog.instance
-            .setTitle(getString(R.string.warnings_in_form))
-            .setMessage(getString(R.string.what_to_do))
-            .setFieldsToDisplay(warningFields)
-            .setNegativeButton(getString(R.string.review))
-            .setPositiveButton(getString(R.string.save)) { presenter.finish(mode) }
-            .show(supportFragmentManager, AlertBottomDialog::class.java.simpleName)
-    }
-
     override fun goBack() {
         onBackPressed()
     }
@@ -346,22 +298,26 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
 
     private fun attemptFinish() {
         if (mode == EnrollmentMode.CHECK) {
-            presenter.backIsClicked()
+            formView.onBackPressed()
         } else {
             showDeleteDialog()
         }
     }
 
     private fun showDeleteDialog() {
-        AlertBottomDialog.instance
-            .setTitle(getString(R.string.title_delete_go_back))
-            .setMessage(getString(R.string.delete_go_back))
-            .setPositiveButton(getString(R.string.missing_mandatory_fields_go_back)) {
+        BottomSheetDialog(
+            bottomSheetDialogUiModel = BottomSheetDialogUiModel(
+                title = getString(R.string.not_saved),
+                message = getString(R.string.discard_go_back),
+                iconResource = R.drawable.ic_error_outline,
+                mainButton = DialogButtonStyle.MainButton(R.string.keep_editing),
+                secondaryButton = DialogButtonStyle.DiscardButton()
+            ),
+            onSecondaryButtonClicked = {
                 presenter.deleteAllSavedData()
                 finish()
             }
-            .setNegativeButton()
-            .show(supportFragmentManager, AlertBottomDialog::class.java.simpleName)
+        ).show(supportFragmentManager, BottomSheetDialogUiModel::class.java.simpleName)
     }
 
     private fun handleGeometry(featureType: FeatureType, dataExtra: String, requestCode: Int) {
@@ -390,33 +346,28 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
     /*endregion*/
 
     /*region TEI*/
-    override fun displayTeiInfo(attrList: List<String>, profileImage: String) {
+    override fun displayTeiInfo(teiInfo: TeiAttributesInfo) {
         if (mode != EnrollmentMode.NEW) {
             binding.title.visibility = View.GONE
             binding.teiDataHeader.root.visibility = View.VISIBLE
 
-            val attrListNotEmpty = attrList.filter { it.isNotEmpty() }
             binding.teiDataHeader.mainAttributes.apply {
-                when (attrListNotEmpty.size) {
-                    0 -> visibility = View.GONE
-                    1 -> text = attrListNotEmpty[0]
-                    else -> text = String.format("%s %s", attrListNotEmpty[0], attrListNotEmpty[1])
-                }
+                text = teiInfo.teiMainLabel(getString(R.string.tracked_entity_type_details))
                 setTextColor(Color.WHITE)
             }
-            binding.teiDataHeader.secundaryAttribute.apply {
-                when (attrListNotEmpty.size) {
-                    0, 1, 2 -> visibility = View.GONE
-                    else -> text = attrListNotEmpty[2]
+            when (val secondaryLabel = teiInfo.teiSecondaryLabel()) {
+                null -> binding.teiDataHeader.secundaryAttribute.visibility = View.GONE
+                else -> {
+                    binding.teiDataHeader.secundaryAttribute.text = secondaryLabel
+                    binding.teiDataHeader.secundaryAttribute.setTextColor(Color.WHITE)
                 }
-                setTextColor(Color.WHITE)
             }
 
-            if (profileImage.isEmpty()) {
+            if (teiInfo.profileImage.isEmpty()) {
                 binding.teiDataHeader.teiImage.visibility = View.GONE
                 binding.teiDataHeader.imageSeparator.visibility = View.GONE
             } else {
-                Glide.with(this).load(File(profileImage))
+                Glide.with(this).load(File(teiInfo.profileImage))
                     .transition(DrawableTransitionOptions.withCrossFade())
                     .transform(CircleCrop())
                     .into(binding.teiDataHeader.teiImage)
@@ -462,16 +413,6 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
 
     /*endregion*/
 
-    /*region DATA ENTRY*/
-    override fun showFields(fields: List<FieldUiModel>?) {
-        fields?.filter {
-            it !is DisplayViewModel
-        }
-
-        formView.processItems(fields)
-    }
-
-    /*endregion*/
     override fun requestFocus() {
         binding.root.requestFocus()
     }
@@ -485,14 +426,7 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
     }
 
     override fun performSaveClick() {
-        if (currentFocus is EditText) {
-            presenter.setFinishing()
-            currentFocus?.apply { clearFocus() }
-        } else {
-            if (!presenter.hasAccess() || presenter.dataIntegrityCheck()) {
-                presenter.finish(mode)
-            }
-        }
+        formView.onSaveClick()
     }
 
     override fun showProgress() {
@@ -512,22 +446,6 @@ class EnrollmentActivity : ActivityGlobalAbstract(), EnrollmentView {
             .setMessage(R.string.enrollment_date_edition_warning)
             .setPositiveButton(R.string.button_ok, null)
         dialog.show()
-    }
-
-    override fun displayConfigurationErrors(
-        configurationError: List<RulesUtilsProviderConfigurationError>
-    ) {
-        MaterialAlertDialogBuilder(this, R.style.DhisMaterialDialog)
-            .setTitle(R.string.warning_error_on_complete_title)
-            .setMessage(configurationError.toMessage(this))
-            .setPositiveButton(
-                R.string.action_close
-            ) { _, _ -> }
-            .setNegativeButton(
-                getString(R.string.action_do_not_show_again)
-            ) { _, _ -> presenter.disableConfErrorMessage() }
-            .setCancelable(false)
-            .show()
     }
 
     override fun registerBiometrics(orgUnit: String) {

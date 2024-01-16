@@ -2,14 +2,14 @@ package org.dhis2.usescases.eventsWithoutRegistration.eventCapture
 
 import io.reactivex.Flowable
 import io.reactivex.processors.FlowableProcessor
-import org.dhis2.Bindings.blockingGetValueCheck
-import org.dhis2.Bindings.userFriendlyValue
+import org.dhis2.commons.bindings.blockingGetValueCheck
+import org.dhis2.commons.bindings.userFriendlyValue
 import org.dhis2.commons.resources.ResourceManager
-import org.dhis2.data.forms.dataentry.fields.FieldViewModelFactory
-import org.dhis2.data.forms.dataentry.fields.orgUnit.OrgUnitViewModel
 import org.dhis2.form.model.FieldUiModel
 import org.dhis2.form.model.LegendValue
+import org.dhis2.form.model.OptionSetConfiguration
 import org.dhis2.form.model.RowAction
+import org.dhis2.form.ui.FieldViewModelFactory
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.helpers.UidsHelper.getUidsList
 import org.hisp.dhis.android.core.arch.repositories.scope.RepositoryScope
@@ -18,7 +18,6 @@ import org.hisp.dhis.android.core.common.ObjectStyle
 import org.hisp.dhis.android.core.common.ValueType
 import org.hisp.dhis.android.core.dataelement.DataElement
 import org.hisp.dhis.android.core.event.Event
-import org.hisp.dhis.android.core.option.Option
 import org.hisp.dhis.android.core.program.ProgramStageDataElement
 import org.hisp.dhis.android.core.program.ProgramStageSection
 
@@ -75,7 +74,7 @@ class EventCaptureFieldProvider(
                 val (rawValue, friendlyValue) = dataValue(
                     event.uid(),
                     fieldViewModel.uid,
-                    fieldViewModel is OrgUnitViewModel
+                    fieldViewModel.valueType == ValueType.ORGANISATION_UNIT
                 )
 
                 val error = checkConflicts(
@@ -146,7 +145,7 @@ class EventCaptureFieldProvider(
             de.valueType() == ValueType.ORGANISATION_UNIT
         )
 
-        val options = options(optionSet)
+        val optionSetConfiguration = options(optionSet)
 
         val error: String = checkConflicts(eventUid, de.uid(), rawValue)
 
@@ -164,13 +163,10 @@ class EventCaptureFieldProvider(
                 programStageSection?.renderType()?.mobile()?.type(),
                 de.displayDescription(),
                 programStageDataElement.renderType()?.mobile(),
-                options.size,
                 de.style() ?: ObjectStyle.builder().build(),
                 de.fieldMask(),
-                getColorByLegend(rawValue, de),
-                options,
-                FeatureType.POINT,
-                de.url()
+                optionSetConfiguration,
+                FeatureType.POINT
             )
 
         return if (error.isNotEmpty()) {
@@ -214,11 +210,7 @@ class EventCaptureFieldProvider(
         }
     }
 
-    private fun checkConflicts(
-        eventUid: String,
-        dataElementUid: String,
-        value: String?
-    ): String {
+    private fun checkConflicts(eventUid: String, dataElementUid: String, value: String?): String {
         val conflicts = d2.importModule().trackerImportConflicts()
             .byEventUid().eq(eventUid)
             .blockingGet()
@@ -230,50 +222,50 @@ class EventCaptureFieldProvider(
         }?.displayDescription() ?: ""
     }
 
-    private fun getColorByLegend(
-        value: String?,
-        dataElement: DataElement
-    ): LegendValue? {
+    private fun getColorByLegend(value: String?, dataElement: DataElement): LegendValue? {
         return if (value == null) {
             null
-        } else try {
-            if (dataElement.valueType()!!.isNumeric &&
-                dataElement.legendSets() != null &&
-                dataElement.legendSets()!!.isNotEmpty()
-            ) {
-                val legendSet = dataElement.legendSets()!![0]
-                var legend =
-                    d2.legendSetModule().legends()
-                        .byStartValue().smallerThan(java.lang.Double.valueOf(value))
-                        .byEndValue().biggerThan(java.lang.Double.valueOf(value))
-                        .byLegendSet().eq(legendSet.uid())
-                        .one()
-                        .blockingGet()
-                if (legend == null) {
-                    legend = d2.legendSetModule().legends()
-                        .byEndValue().eq(java.lang.Double.valueOf(value))
-                        .byLegendSet().eq(legendSet.uid())
-                        .one()
-                        .blockingGet()
+        } else {
+            try {
+                if (dataElement.valueType()!!.isNumeric &&
+                    dataElement.legendSets() != null &&
+                    dataElement.legendSets()!!.isNotEmpty()
+                ) {
+                    val legendSet = dataElement.legendSets()!![0]
+                    var legend =
+                        d2.legendSetModule().legends()
+                            .byStartValue().smallerThan(java.lang.Double.valueOf(value))
+                            .byEndValue().biggerThan(java.lang.Double.valueOf(value))
+                            .byLegendSet().eq(legendSet.uid())
+                            .one()
+                            .blockingGet()
+                    if (legend == null) {
+                        legend = d2.legendSetModule().legends()
+                            .byEndValue().eq(java.lang.Double.valueOf(value))
+                            .byLegendSet().eq(legendSet.uid())
+                            .one()
+                            .blockingGet()
+                    }
+                    if (legend != null) {
+                        return LegendValue(
+                            resourceManager.getColorFrom(legend.color()),
+                            legend.displayName()
+                        )
+                    }
                 }
-                if (legend != null) {
-                    return LegendValue(
-                        resourceManager.getColorFrom(legend.color()),
-                        legend.displayName()
-                    )
-                }
+                null
+            } catch (e: Exception) {
+                null
             }
-            null
-        } catch (e: Exception) {
-            null
         }
     }
 
-    private fun options(optionSetUid: String?): List<Option> =
-        if (optionSetUid?.isNotEmpty() == true) {
-            d2.optionModule().options().byOptionSetUid().eq(optionSetUid)
+    private fun options(optionSetUid: String?): OptionSetConfiguration? = optionSetUid?.let {
+        OptionSetConfiguration.config(
+            d2.optionModule().options().byOptionSetUid().eq(it).blockingCount()
+        ) {
+            d2.optionModule().options().byOptionSetUid().eq(it)
                 .orderBySortOrder(RepositoryScope.OrderByDirection.ASC).blockingGet()
-        } else {
-            emptyList()
         }
+    }
 }

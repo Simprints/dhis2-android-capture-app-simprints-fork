@@ -8,8 +8,6 @@
     <string name="error_wrong_credentials">Felaktiga uppgifter</string>
     <string name="error_unexpected_error">Oväntat fel</string>
     <string name="error_internal_server_error">Internt serverfel</string>
-    <string name="yes">ja</string>
-    <string name="no">nej</string>
     <string name="no_value">inget värde</string>
     <!-- SyncService strings: -->
     <string name="sync_now">Synkronisera nu</string>
@@ -44,7 +42,6 @@
     <string name="configuration_sync_failed">Konfigurationssynkroniseringen misslyckades</string>
     <string name="data_sync_failed">Data synkronisering misslyckades</string>
     <string name="account_recovery">kontoåterställning</string>
-
     <!--PERIOD-->
     <string name="DAILY">Dagligen</string>
     <string name="WEEKLY">Varje vecka</string>
@@ -78,7 +75,6 @@
     <string name="event_approved">Händelse godkänd</string>
     <string name="event_inactive">Händelse inaktiv</string>
     <string name="read_only">read only</string>
-    <string name="complete">Färdigt</string>
     <string name="completed">Avklarad</string>
     <string name="cancelled">Avbruten</string>
     <string name="re_open">Öppna igen</string>
@@ -140,9 +136,6 @@
     <string name="log_out">Logga ut</string>
     <string name="block_session">Blockera sessionen</string>
 
-    <!--MAP SELECTION-->
-    <string name="select_location">Välj plats</string>
-
     <!-- SYNC -->
     <string name="a_minute">1 minut</string>
     <string name="fifteen_minute">15 minuter</string>
@@ -180,7 +173,6 @@
     <string name="enroll_in">Registreras %s</string>
     <string name="missing_mandatory_fields_title">Obligatoriska fält saknas</string>
     <string name="missing_mandatory_fields_text">Några obligatoriska fält saknas. Om du vill gå tillbaka nu raderas alla sparade uppgifter.</string>
-    <string name="missing_mandatory_fields_events">Några obligatoriska fält saknas. Du kan gå tillbaka nu, men den här händelsen kommer inte att kunna slutföras</string>
     <string name="missing_mandatory_fields_go_back">Ta bort och gå tillbaka</string>
     <!--EVENT SUMMARY-->
     <string name="section_list">Sektion lista</string>
