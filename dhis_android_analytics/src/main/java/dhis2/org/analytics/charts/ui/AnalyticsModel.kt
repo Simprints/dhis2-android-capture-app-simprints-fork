@@ -362,9 +362,7 @@ data class ChartModel(val graph: Graph) : AnalyticsModel(graph.visualizationUid 
         }
     }
 
-    private fun propagateRelativePeriod(
-        @IdRes itemId: Int
-    ) {
+    private fun propagateRelativePeriod(@IdRes itemId: Int) {
         val relativePeriodSelected =
             periodToId.filterValues { it == itemId }.keys.first()
         val thisPeriod = relativePeriodSelected.getThisFromPeriod()
@@ -508,6 +506,7 @@ data class ChartModel(val graph: Graph) : AnalyticsModel(graph.visualizationUid 
     fun showError(): Boolean = graph.hasError
 
     fun pieChartDataIsZero(): Boolean = observableChartType.get() == ChartType.PIE_CHART &&
+        !graph.hasError &&
         graph.series.all { serie -> serie.coordinates.all { point -> point.fieldValue == 0f } }
 
     fun showNoDataMessage(): Boolean {

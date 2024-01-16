@@ -1,16 +1,17 @@
 package org.dhis2.usescases.general;
 
+import static org.dhis2.utils.analytics.AnalyticsConstants.CLICK;
+import static org.dhis2.utils.analytics.AnalyticsConstants.SHOW_HELP;
+import static org.dhis2.utils.session.PinDialogKt.PIN_DIALOG_TAG;
+
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -23,42 +24,33 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.dhis2.App;
 import org.dhis2.Bindings.ExtensionsKt;
-import org.dhis2.BuildConfig;
 import org.dhis2.R;
+import org.dhis2.commons.ActivityResultObservable;
+import org.dhis2.commons.ActivityResultObserver;
+import org.dhis2.commons.Constants;
 import org.dhis2.commons.dialogs.CustomDialog;
-import org.dhis2.commons.dialogs.DialogClickListener;
+import org.dhis2.commons.locationprovider.LocationProvider;
+import org.dhis2.commons.popupmenu.AppMenuHelper;
 import org.dhis2.data.server.ServerComponent;
 import org.dhis2.usescases.login.LoginActivity;
+import org.dhis2.usescases.login.accounts.AccountsActivity;
 import org.dhis2.usescases.main.MainActivity;
+import org.dhis2.usescases.qrScanner.ScanActivity;
 import org.dhis2.usescases.splash.SplashActivity;
-import org.dhis2.utils.ActivityResultObservable;
-import org.dhis2.utils.ActivityResultObserver;
-import org.dhis2.utils.Constants;
 import org.dhis2.utils.HelpManager;
 import org.dhis2.utils.OnDialogClickListener;
 import org.dhis2.utils.analytics.AnalyticsConstants;
 import org.dhis2.utils.analytics.AnalyticsHelper;
 import org.dhis2.utils.granularsync.SyncStatusDialog;
-import org.dhis2.utils.reporting.CrashReportController;
-import org.dhis2.commons.resources.LocaleSelector;
+import org.dhis2.commons.reporting.CrashReportController;
 import org.dhis2.utils.session.PinDialog;
 import org.jetbrains.annotations.NotNull;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-
 import javax.inject.Inject;
 
+import io.reactivex.Observable;
+import io.reactivex.subjects.BehaviorSubject;
 import kotlin.Unit;
-import rx.Observable;
-import rx.subjects.BehaviorSubject;
-import timber.log.Timber;
-
-import static org.dhis2.utils.Constants.CAMERA_REQUEST;
-import static org.dhis2.utils.Constants.GALLERY_REQUEST;
-import static org.dhis2.utils.analytics.AnalyticsConstants.CLICK;
-import static org.dhis2.utils.analytics.AnalyticsConstants.SHOW_HELP;
-import static org.dhis2.utils.session.PinDialogKt.PIN_DIALOG_TAG;
 
 
 public abstract class ActivityGlobalAbstract extends AppCompatActivity
@@ -72,42 +64,37 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
     public AnalyticsHelper analyticsHelper;
     @Inject
     public CrashReportController crashReportController;
+    @Inject
+    public LocationProvider locationProvider;
+
     private PinDialog pinDialog;
     private boolean comesFromImageSource = false;
 
     private ActivityResultObserver activityResultObserver;
-
-    public void requestEnableLocation() {
-        displayMessage(getString(R.string.enable_location_message));
-    }
+    private CustomDialog descriptionDialog;
 
     public enum Status {
         ON_PAUSE,
         ON_RESUME
     }
 
-
-    public void setScreenName(String name) {
-        crashReportController.trackScreenName(name);
-    }
-
     @Override
     protected void attachBaseContext(Context newBase) {
-        ServerComponent serverComponent = ((App) newBase.getApplicationContext()).getServerComponent();
-        if (serverComponent != null && serverComponent.getD2().userModule().blockingIsLogged()) {
-            ContextWrapper localeUpdatedContext = new LocaleSelector(newBase, serverComponent.getD2()).updateUiLanguage();
-            super.attachBaseContext(localeUpdatedContext);
-        } else {
-            super.attachBaseContext(newBase);
-        }
+        super.attachBaseContext(
+                ActivityGlobalAbstractExtensionsKt.wrappedContextForLanguage(
+                        this,
+                        ((App) newBase.getApplicationContext()).getServerComponent(),
+                        newBase
+                )
+        );
     }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         ServerComponent serverComponent = ((App) getApplicationContext()).getServerComponent();
         if (serverComponent != null) {
-            serverComponent.openIdSession().setSessionCallback(this, () -> {
-                showSessionExpired();
+            serverComponent.openIdSession().setSessionCallback(this, logOutReason -> {
+                startActivity(LoginActivity.class, LoginActivity.Companion.bundle(true, -1, false, logOutReason), true, true, null);
                 return Unit.INSTANCE;
             });
             if (serverComponent.userManager().isUserLoggedIn().blockingFirst() &&
@@ -120,12 +107,24 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
 
         SharedPreferences prefs = getSharedPreferences();
-        if (this instanceof MainActivity || this instanceof LoginActivity || this instanceof SplashActivity) {
+        if (this instanceof MainActivity || this instanceof LoginActivity || this instanceof SplashActivity || this instanceof AccountsActivity) {
+            if (serverComponent != null) {
+                serverComponent.themeManager().clearProgramTheme();
+            }
             prefs.edit().remove(Constants.PROGRAM_THEME).apply();
         }
 
-        if (!(this instanceof SplashActivity) && !(this instanceof LoginActivity))
-            setTheme(prefs.getInt(Constants.PROGRAM_THEME, prefs.getInt(Constants.THEME, R.style.AppTheme)));
+        if (!(this instanceof SplashActivity) &&
+                !(this instanceof LoginActivity) &&
+                !(this instanceof AccountsActivity) &&
+                !(this instanceof ScanActivity)
+        ) {
+            if (serverComponent != null) {
+                setTheme(serverComponent.themeManager().getProgramTheme());
+            } else {
+                setTheme(R.style.AppTheme);
+            }
+        }
 
         super.onCreate(savedInstanceState);
     }
@@ -133,7 +132,7 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
     private void initPinDialog() {
         pinDialog = new PinDialog(PinDialog.Mode.ASK,
                 (this instanceof LoginActivity),
-                aBoolean -> {
+                () -> {
                     startActivity(MainActivity.class, null, true, true, null);
                     return null;
                 },
@@ -172,6 +171,9 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
     protected void onPause() {
         super.onPause();
         lifeCycleObservable.onNext(Status.ON_PAUSE);
+        if (locationProvider != null) {
+            locationProvider.stopLocationUpdates();
+        }
     }
 
     @Override
@@ -221,29 +223,19 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
     }
 
     public void showMoreOptions(View view) {
-        PopupMenu popupMenu = new PopupMenu(this, view, Gravity.BOTTOM);
-        try {
-            Field[] fields = popupMenu.getClass().getDeclaredFields();
-            for (Field field : fields) {
-                if ("mPopup".equals(field.getName())) {
-                    field.setAccessible(true);
-                    Object menuPopupHelper = field.get(popupMenu);
-                    Class<?> classPopupHelper = Class.forName(menuPopupHelper.getClass().getName());
-                    Method setForceIcons = classPopupHelper.getMethod("setForceShowIcon", boolean.class);
-                    setForceIcons.invoke(menuPopupHelper, true);
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            Timber.e(e);
-        }
-        popupMenu.getMenuInflater().inflate(R.menu.home_menu, popupMenu.getMenu());
-        popupMenu.setOnMenuItemClickListener(item -> {
-            analyticsHelper.setEvent(SHOW_HELP, CLICK, SHOW_HELP);
-            showTutorial(false);
-            return false;
-        });
-        popupMenu.show();
+        new AppMenuHelper.Builder()
+                .menu(this, R.menu.home_menu)
+                .anchor(view)
+                .onMenuInflated(popupMenu -> {
+                    return Unit.INSTANCE;
+                })
+                .onMenuItemClicked(item -> {
+                    analyticsHelper.setEvent(SHOW_HELP, CLICK, SHOW_HELP);
+                    showTutorial(false);
+                    return false;
+                })
+                .build()
+                .show();
     }
 
     public Context getContext() {
@@ -363,14 +355,8 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        switch (requestCode) {
-            case GALLERY_REQUEST:
-            case CAMERA_REQUEST:
-                comesFromImageSource = true;
-                break;
-        }
-
         if (activityResultObserver != null) {
+            comesFromImageSource = true;
             activityResultObserver.onActivityResult(requestCode, resultCode, data);
             activityResultObserver = null;
         }
@@ -380,7 +366,10 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
 
     @Override
     public void showDescription(String description) {
-        new CustomDialog(
+        if (descriptionDialog != null) {
+            descriptionDialog.cancel();
+        }
+        descriptionDialog = new CustomDialog(
                 getAbstracContext(),
                 getString(R.string.info),
                 description,
@@ -388,7 +377,9 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
                 null,
                 Constants.DESCRIPTION_DIALOG,
                 null
-        ).show();
+        );
+
+        descriptionDialog.show();
     }
 
     @Override
@@ -399,29 +390,5 @@ public abstract class ActivityGlobalAbstract extends AppCompatActivity
     @Override
     public AnalyticsHelper analyticsHelper() {
         return analyticsHelper;
-    }
-
-    private void showSessionExpired() {
-        CustomDialog sessionDialog = new CustomDialog(
-                this,
-                getString(R.string.openid_session_expired),
-                getString(R.string.openid_session_expired_message),
-                getString(R.string.action_accept),
-                null,
-                Constants.SESSION_DIALOG_RQ,
-                new DialogClickListener() {
-                    @Override
-                    public void onPositive() {
-                        startActivity(LoginActivity.class, LoginActivity.Companion.bundle(true), true, true, null);
-                    }
-
-                    @Override
-                    public void onNegative() {
-
-                    }
-                }
-        );
-        sessionDialog.setCancelable(false);
-        sessionDialog.show();
     }
 }

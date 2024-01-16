@@ -1,46 +1,51 @@
 package org.dhis2.usescases.datasets.datasetDetail;
 
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.transition.ChangeBounds;
 import android.transition.Transition;
 import android.transition.TransitionManager;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.constraintlayout.widget.ConstraintSet;
 import androidx.core.view.ViewCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
+import androidx.lifecycle.ViewModelProvider;
 
 import org.dhis2.App;
 import org.dhis2.Bindings.ExtensionsKt;
 import org.dhis2.Bindings.ViewExtensionsKt;
 import org.dhis2.R;
-import org.dhis2.databinding.ActivityDatasetDetailBinding;
-import org.dhis2.usescases.datasets.datasetDetail.datasetList.DataSetListFragment;
-import org.dhis2.usescases.general.ActivityGlobalAbstract;
-import org.dhis2.commons.orgunitselector.OUTreeFragment;
-import org.dhis2.commons.orgunitselector.OnOrgUnitSelectionFinished;
-import org.dhis2.utils.Constants;
-import org.dhis2.utils.DateUtils;
-import org.dhis2.utils.category.CategoryDialog;
-import org.dhis2.utils.customviews.navigationbar.NavigationPageConfigurator;
-import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
-import org.jetbrains.annotations.NotNull;
+import org.dhis2.commons.Constants;
 import org.dhis2.commons.filters.FilterItem;
 import org.dhis2.commons.filters.FilterManager;
 import org.dhis2.commons.filters.FiltersAdapter;
+import org.dhis2.commons.orgunitselector.OUTreeFragment;
+import org.dhis2.commons.sync.ConflictType;
+import org.dhis2.databinding.ActivityDatasetDetailBinding;
+import org.dhis2.ui.ThemeManager;
+import org.dhis2.usescases.datasets.datasetDetail.datasetList.DataSetListFragment;
+import org.dhis2.usescases.general.ActivityGlobalAbstract;
+import org.dhis2.utils.DateUtils;
+import org.dhis2.utils.category.CategoryDialog;
+import org.dhis2.commons.sync.SyncContext;
+import org.dhis2.utils.granularsync.SyncStatusDialog;
+import org.dhis2.utils.granularsync.SyncStatusDialogNavigatorKt;
+import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 
-import java.util.Collections;
 import java.util.List;
 
 import javax.inject.Inject;
 
 import dhis2.org.analytics.charts.ui.GroupAnalyticsFragment;
+import kotlin.Unit;
 
 
-public class DataSetDetailActivity extends ActivityGlobalAbstract implements DataSetDetailView,
-        OnOrgUnitSelectionFinished {
+public class DataSetDetailActivity extends ActivityGlobalAbstract implements DataSetDetailView {
 
     private ActivityDatasetDetailBinding binding;
     private String dataSetUid;
@@ -56,25 +61,49 @@ public class DataSetDetailActivity extends ActivityGlobalAbstract implements Dat
     FiltersAdapter filtersAdapter;
 
     @Inject
-    NavigationPageConfigurator pageConfigurator;
+    ThemeManager themeManager;
+
+    @Inject
+    DataSetDetailViewModelFactory viewModelFactory;
 
     private boolean backDropActive;
+
+    private DataSetDetailViewModel viewModel;
+
+    public static Intent intent(
+            @NonNull Context context,
+            @NonNull String dataSetUid) {
+        Intent intent = new Intent(context, DataSetDetailActivity.class);
+        intent.putExtra("DATASET_UID", dataSetUid);
+        return intent;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         dataSetUid = getIntent().getStringExtra("DATASET_UID");
         dataSetDetailComponent = ((App) getApplicationContext()).userComponent().plus(new DataSetDetailModule(this, dataSetUid));
         dataSetDetailComponent.inject(this);
+        themeManager.setDataSetTheme(dataSetUid);
         super.onCreate(savedInstanceState);
+
+        viewModel = new ViewModelProvider(this, viewModelFactory).get(DataSetDetailViewModel.class);
 
         binding = DataBindingUtil.setContentView(this, R.layout.activity_dataset_detail);
         binding.setName(getIntent().getStringExtra(Constants.DATA_SET_NAME));
-        boolean accessWriteData = Boolean.parseBoolean(getIntent().getStringExtra(Constants.ACCESS_DATA));
         binding.setPresenter(presenter);
 
         ViewExtensionsKt.clipWithRoundedCorners(binding.eventsLayout, ExtensionsKt.getDp(16));
         binding.filterLayout.setAdapter(filtersAdapter);
-        binding.navigationBar.pageConfiguration(pageConfigurator);
+        configureBottomNavigation();
+
+        if (SyncStatusDialogNavigatorKt.shouldLaunchSyncDialog(getIntent())) {
+            showGranularSync();
+        }
+    }
+
+    private void configureBottomNavigation() {
+        boolean accessWriteData = Boolean.parseBoolean(getIntent().getStringExtra(Constants.ACCESS_DATA));
+        viewModel.getPageConfiguration().observe(this, binding.navigationBar::pageConfiguration);
         binding.navigationBar.setOnNavigationItemSelectedListener(item -> {
             Fragment fragment = null;
             switch (item.getItemId()) {
@@ -82,6 +111,7 @@ public class DataSetDetailActivity extends ActivityGlobalAbstract implements Dat
                     fragment = DataSetListFragment.newInstance(dataSetUid, accessWriteData);
                     break;
                 case R.id.navigation_analytics:
+                    presenter.trackDataSetAnalytics();
                     fragment = GroupAnalyticsFragment.Companion.forDataSet(dataSetUid);
                     break;
             }
@@ -93,6 +123,7 @@ public class DataSetDetailActivity extends ActivityGlobalAbstract implements Dat
         });
         binding.navigationBar.selectItemAt(0);
         binding.fragmentContainer.setPadding(0, 0, 0, binding.navigationBar.isHidden() ? 0 : ExtensionsKt.getDp(56));
+
     }
 
     @Override
@@ -141,14 +172,15 @@ public class DataSetDetailActivity extends ActivityGlobalAbstract implements Dat
 
     @Override
     public void openOrgUnitTreeSelector() {
-        OUTreeFragment ouTreeFragment = OUTreeFragment.Companion.newInstance(true, FilterManager.getInstance().getOrgUnitUidsFilters());
-        ouTreeFragment.setSelectionCallback(this);
-        ouTreeFragment.show(getSupportFragmentManager(), "OUTreeFragment");
-    }
-
-    @Override
-    public void onSelectionFinished(List<? extends OrganisationUnit> selectedOrgUnits) {
-        presenter.setOrgUnitFilters((List<OrganisationUnit>) selectedOrgUnits);
+        new OUTreeFragment.Builder()
+                .showAsDialog()
+                .withPreselectedOrgUnits(FilterManager.getInstance().getOrgUnitUidsFilters())
+                .onSelection(selectedOrgUnits -> {
+                    presenter.setOrgUnitFilters((List<OrganisationUnit>) selectedOrgUnits);
+                    return Unit.INSTANCE;
+                })
+                .build()
+                .show(getSupportFragmentManager(), "OUTreeFragment");
     }
 
     @Override
@@ -199,5 +231,15 @@ public class DataSetDetailActivity extends ActivityGlobalAbstract implements Dat
 
     public void setProgress(boolean active) {
         binding.programProgress.setVisibility(active ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    public void showGranularSync() {
+        presenter.trackDataSetGranularSync();
+        new SyncStatusDialog.Builder()
+                .withContext(this, null)
+                .withSyncContext(new SyncContext.DataSet(dataSetUid))
+                .onDismissListener(hasChanged -> presenter.refreshList())
+                .show("DATASET_SYNC");
     }
 }

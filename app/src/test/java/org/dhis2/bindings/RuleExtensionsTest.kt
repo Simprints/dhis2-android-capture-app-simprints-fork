@@ -5,10 +5,12 @@ import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.whenever
 import java.util.Date
 import junit.framework.Assert.assertTrue
-import org.dhis2.Bindings.toRuleAttributeValue
-import org.dhis2.Bindings.toRuleDataValue
-import org.dhis2.Bindings.toRuleEngineObject
-import org.dhis2.data.forms.RuleActionUnsupported
+import org.dhis2.form.bindings.toRuleActionList
+import org.dhis2.form.bindings.toRuleAttributeValue
+import org.dhis2.form.bindings.toRuleDataValue
+import org.dhis2.form.bindings.toRuleEngineObject
+import org.dhis2.form.bindings.toRuleVariable
+import org.dhis2.form.model.RuleActionError
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.common.ObjectWithUid
 import org.hisp.dhis.android.core.common.ValueType
@@ -18,29 +20,43 @@ import org.hisp.dhis.android.core.event.Event
 import org.hisp.dhis.android.core.option.Option
 import org.hisp.dhis.android.core.option.OptionCollectionRepository
 import org.hisp.dhis.android.core.program.ProgramRuleAction
+import org.hisp.dhis.android.core.program.ProgramRuleActionType.SHOWERROR
+import org.hisp.dhis.android.core.program.ProgramRuleVariable
 import org.hisp.dhis.android.core.program.ProgramRuleVariableCollectionRepository
+import org.hisp.dhis.android.core.program.ProgramRuleVariableSourceType
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityAttribute
+import org.hisp.dhis.android.core.trackedentity.TrackedEntityAttributeCollectionRepository
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityAttributeValue
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityDataValue
+import org.hisp.dhis.rules.models.RuleActionUnsupported
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.mockito.Mockito
+import org.mockito.Mockito.RETURNS_DEEP_STUBS
 
 class RuleExtensionsTest {
 
     private val dataElementRepository: DataElementCollectionRepository = Mockito.mock(
         DataElementCollectionRepository::class.java,
-        Mockito.RETURNS_DEEP_STUBS
+        RETURNS_DEEP_STUBS
     )
 
     private val ruleVariableRepository: ProgramRuleVariableCollectionRepository = Mockito.mock(
         ProgramRuleVariableCollectionRepository::class.java,
-        Mockito.RETURNS_DEEP_STUBS
+        RETURNS_DEEP_STUBS
     )
     private val optionRepository: OptionCollectionRepository = Mockito.mock(
         OptionCollectionRepository::class.java,
-        Mockito.RETURNS_DEEP_STUBS
+        RETURNS_DEEP_STUBS
     )
-    private val d2: D2 = Mockito.mock(D2::class.java, Mockito.RETURNS_DEEP_STUBS)
+    private val d2: D2 = Mockito.mock(D2::class.java, RETURNS_DEEP_STUBS)
+
+    private val trackedEntityAttributeCollectionRepository:
+        TrackedEntityAttributeCollectionRepository =
+            Mockito.mock(
+                TrackedEntityAttributeCollectionRepository::class.java,
+                RETURNS_DEEP_STUBS
+            )
 
     @Test
     fun `Should transform trackedEntityDataValues to ruleDataValues with optionName value`() {
@@ -335,6 +351,31 @@ class RuleExtensionsTest {
             .build()
         val ruleEngineAction = ruleAction.toRuleEngineObject()
         assertTrue(ruleEngineAction is RuleActionUnsupported)
+    }
+
+    @Test
+    fun `Should parse program rule error`() {
+        val programRuleAction = ProgramRuleAction.builder()
+            .uid("uid")
+            .programRuleActionType(SHOWERROR)
+            .build()
+        val ruleActionList = listOf<ProgramRuleAction>(programRuleAction).toRuleActionList()
+        assertTrue(ruleActionList.first() is RuleActionError)
+    }
+
+    @Test
+    fun `should parse ProgramRuleVariable to RuleVariable`() {
+        val programRuleVariable = ProgramRuleVariable.builder()
+            .uid("uid")
+            .name("rule")
+            .programRuleVariableSourceType(ProgramRuleVariableSourceType.CALCULATED_VALUE)
+            .build()
+        val ruleVariable = programRuleVariable.toRuleVariable(
+            attributeRepository = trackedEntityAttributeCollectionRepository,
+            dataElementRepository = dataElementRepository,
+            optionRepository = optionRepository
+        )
+        assertEquals(programRuleVariable.name(), ruleVariable.name())
     }
 
     private fun getTrackedEntityDataValues(): List<TrackedEntityDataValue> {

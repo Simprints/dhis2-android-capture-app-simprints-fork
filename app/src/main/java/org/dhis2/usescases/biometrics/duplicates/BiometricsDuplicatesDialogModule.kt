@@ -4,48 +4,28 @@ import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dhis2.org.analytics.charts.Charts
-import org.dhis2.Bindings.valueTypeHintMap
 import org.dhis2.R
+import org.dhis2.commons.di.dagger.PerFragment
 import org.dhis2.commons.filters.data.FilterPresenter
+import org.dhis2.commons.network.NetworkUtils
+import org.dhis2.commons.reporting.CrashReportController
 import org.dhis2.commons.resources.ResourceManager
 import org.dhis2.commons.schedulers.SchedulerProvider
+import org.dhis2.data.dhislogic.DhisEnrollmentUtils
 import org.dhis2.data.dhislogic.DhisPeriodUtils
 import org.dhis2.data.enrollment.EnrollmentUiDataHelper
-import org.dhis2.data.forms.dataentry.FormUiModelColorFactoryImpl
-import org.dhis2.data.forms.dataentry.fields.FieldViewModelFactory
-import org.dhis2.data.forms.dataentry.fields.FieldViewModelFactoryImpl
-import org.dhis2.data.forms.dataentry.fields.LayoutProviderImpl
+import org.dhis2.data.forms.dataentry.SearchTEIRepository
+import org.dhis2.data.forms.dataentry.SearchTEIRepositoryImpl
 import org.dhis2.data.sorting.SearchSortingValueSetter
-import org.dhis2.form.ui.provider.DisplayNameProviderImpl
-import org.dhis2.form.ui.provider.HintProviderImpl
-import org.dhis2.form.ui.style.FormUiColorFactory
+import org.dhis2.ui.ThemeManager
 import org.dhis2.usescases.searchTrackEntity.SearchRepository
 import org.dhis2.usescases.searchTrackEntity.SearchRepositoryImpl
 import org.dhis2.utils.DateUtils
-import org.dhis2.utils.reporting.CrashReportController
 import org.hisp.dhis.android.core.D2
 
 @Module
 class BiometricsDuplicatesDialogModule(private val context: Context, private val teiType: String,
     private val initialProgram: String) {
-
-    @Provides
-    open fun provideFormUiColorFactory(): FormUiColorFactory {
-        return FormUiModelColorFactoryImpl(context, false)
-    }
-
-    @Provides
-    fun fieldViewModelFactory(
-        context: Context,
-        colorFactory: FormUiColorFactory,
-        d2: D2
-    ): FieldViewModelFactory {
-        return FieldViewModelFactoryImpl(
-            context.valueTypeHintMap(), true, colorFactory,
-            LayoutProviderImpl(), HintProviderImpl(context),
-            DisplayNameProviderImpl(d2)
-        )
-    }
 
     @Provides
     fun enrollmentUiDataHelper(context: Context): EnrollmentUiDataHelper {
@@ -75,14 +55,20 @@ class BiometricsDuplicatesDialogModule(private val context: Context, private val
     }
 
     @Provides
+    internal fun searchRepository(d2: D2): SearchTEIRepository {
+        return SearchTEIRepositoryImpl(d2, DhisEnrollmentUtils(d2))
+    }
+
+    @Provides
     fun searchRepository(
-        d2: D2,
-        filterPresenter: FilterPresenter,
-        resources: ResourceManager,
-        searchSortingValueSetter: SearchSortingValueSetter,
-        fieldFactory: FieldViewModelFactory,
-        periodUtils: DhisPeriodUtils, charts: Charts?,
-        crashReportController: CrashReportController?
+        d2: D2, filterPresenter: FilterPresenter?,
+        resources: ResourceManager?,
+        searchSortingValueSetter: SearchSortingValueSetter?,
+        periodUtils: DhisPeriodUtils?, charts: Charts?,
+        crashReportController: CrashReportController?,
+        networkUtils: NetworkUtils?,
+        searchTEIRepository: SearchTEIRepository?,
+        themeManager: ThemeManager?
     ): SearchRepository {
         return SearchRepositoryImpl(
             teiType,
@@ -91,9 +77,12 @@ class BiometricsDuplicatesDialogModule(private val context: Context, private val
             filterPresenter,
             resources,
             searchSortingValueSetter,
-            fieldFactory,
-            periodUtils,charts,
-            crashReportController
+            periodUtils,
+            charts,
+            crashReportController,
+            networkUtils,
+            searchTEIRepository,
+            themeManager
         )
     }
 

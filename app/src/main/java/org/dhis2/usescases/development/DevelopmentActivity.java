@@ -15,12 +15,13 @@ import com.google.gson.reflect.TypeToken;
 
 import org.dhis2.App;
 import org.dhis2.R;
-import org.dhis2.databinding.DevelopmentActivityBinding;
 import org.dhis2.commons.featureconfig.ui.FeatureConfigView;
+import org.dhis2.databinding.DevelopmentActivityBinding;
+import org.dhis2.ui.dialogs.signature.SignatureDialog;
 import org.dhis2.usescases.general.ActivityGlobalAbstract;
 import org.dhis2.usescases.main.MainActivity;
 import org.dhis2.utils.customviews.BreakTheGlassBottomDialog;
-import org.dhis2.utils.dialFloatingActionButton.DialItem;
+import org.hisp.dhis.android.core.D2;
 import org.hisp.dhis.android.core.D2Manager;
 
 import java.io.BufferedReader;
@@ -30,7 +31,6 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -47,50 +47,21 @@ public class DevelopmentActivity extends ActivityGlobalAbstract {
         super.onCreate(savedInstanceState);
         binding = DataBindingUtil.setContentView(this, R.layout.development_activity);
 
-        loadAnalyticsDevTools();
-        loadLocaleDevTools();
         loadIconsDevTools();
-        loadBreakTheGlass();
-        loadProgramRuleCheck();
+        loadCrashControl();
         loadFeatureConfig();
+        loadSignature();
+        loadConflicts();
     }
 
-    private void loadProgramRuleCheck() {
-        binding.ruleActionQualityButton.setOnClickListener(view -> {
-            binding.ruleActionQualityResult.setText("Checking...");
-            String result = new ProgramRulesValidations(D2Manager.getD2()).validateRules();
-            binding.ruleActionQualityResult.setText(result);
+    private void loadConflicts() {
+        binding.addConflicts.setOnClickListener(view-> {
+            D2 d2 = D2Manager.getD2();
+            new ConflictGenerator(d2).generate();
         });
-    }
-
-    private void loadAnalyticsDevTools() {
-        binding.matomoButton.setOnClickListener(view -> {
-            if (!binding.matomoUrl.getText().toString().isEmpty() &&
-                    !binding.matomoId.getText().toString().isEmpty()) {
-                ((App) getApplicationContext()).appComponent().matomoController().updateDhisImplementationTracker(
-                        binding.matomoUrl.getText().toString(),
-                        Integer.parseInt(binding.matomoId.getText().toString()),
-                        "dev-tracker"
-                );
-            }
-        });
-    }
-
-    private void loadLocaleDevTools() {
-        binding.localeButton.setOnClickListener(view -> {
-            if (binding.locale.getText().toString() != null) {
-                String localeCode = binding.locale.getText().toString();
-                Resources resources = getResources();
-                DisplayMetrics dm = resources.getDisplayMetrics();
-                Configuration config = resources.getConfiguration();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                    config.setLocale(new Locale(localeCode.toLowerCase()));
-                } else {
-                    config.locale = new Locale(localeCode.toLowerCase());
-                }
-                resources.updateConfiguration(config, dm);
-                startActivity(MainActivity.class, null, true, true, null);
-            }
+        binding.clearConflicts.setOnClickListener(view -> {
+            D2 d2 = D2Manager.getD2();
+            new ConflictGenerator(d2).clear();
         });
     }
 
@@ -215,22 +186,23 @@ public class DevelopmentActivity extends ActivityGlobalAbstract {
         renderIconForPosition(count);
     }
 
-    private void loadBreakTheGlass() {
-        binding.breakGlassButton.setOnClickListener(view ->
-                new BreakTheGlassBottomDialog()
-                        .setPositiveButton(reason -> {
-                            Toast.makeText(this, reason, Toast.LENGTH_SHORT).show();
-                            return Unit.INSTANCE;
-                        })
-                        .show(
-                                getSupportFragmentManager(),
-                                BreakTheGlassBottomDialog.class.getName()));
+    private void loadCrashControl() {
+        binding.crashButton.setOnClickListener(view -> {
+            throw new IllegalArgumentException("KA BOOOOOM!");
+        });
     }
 
     private void loadFeatureConfig() {
         binding.featureConfigButton.setOnClickListener(view -> {
             startActivity(FeatureConfigView.class, null, false, false, null);
         });
+    }
+
+    private void loadSignature() {
+        binding.signature.setOnClickListener(view -> {
+                    new SignatureDialog("Signature", bitmap -> Unit.INSTANCE).show(getSupportFragmentManager(), "Signature");
+                }
+        );
     }
 
     @Override

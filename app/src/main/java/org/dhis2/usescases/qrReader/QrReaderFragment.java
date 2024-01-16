@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.Gson;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.Result;
@@ -25,14 +26,14 @@ import com.google.zxing.Result;
 import org.dhis2.Components;
 import org.dhis2.R;
 import org.dhis2.data.qr.QRjson;
-import org.dhis2.data.tuples.Pair;
-import org.dhis2.data.tuples.Trio;
+import org.dhis2.commons.data.tuples.Pair;
+import org.dhis2.commons.data.tuples.Trio;
 import org.dhis2.databinding.FragmentQrBinding;
 import org.dhis2.usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity;
 import org.dhis2.usescases.general.FragmentGlobalAbstract;
 import org.dhis2.usescases.main.MainActivity;
 import org.dhis2.usescases.teiDashboard.TeiDashboardMobileActivity;
-import org.dhis2.utils.Constants;
+import org.dhis2.commons.Constants;
 import org.dhis2.utils.NetworkUtils;
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityDataValue;
 import org.json.JSONArray;
@@ -47,8 +48,8 @@ import me.dm7.barcodescanner.zxing.ZXingScannerView;
 import timber.log.Timber;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-import static org.dhis2.utils.Constants.ORG_UNIT;
-import static org.dhis2.utils.Constants.PROGRAM_UID;
+import static org.dhis2.commons.Constants.ORG_UNIT;
+import static org.dhis2.commons.Constants.PROGRAM_UID;
 
 
 /**
@@ -236,7 +237,7 @@ public class QrReaderFragment extends FragmentGlobalAbstract implements ZXingSca
     }
 
     private void showError(String message) {
-        new AlertDialog.Builder(context, R.style.CustomDialog)
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.MaterialDialog)
                 .setTitle(getString(R.string.QR_SCANNER))
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.action_accept), (dialog, which) -> {
@@ -406,7 +407,7 @@ public class QrReaderFragment extends FragmentGlobalAbstract implements ZXingSca
         // READ MORE
         message = message + "\n\n" + getString(R.string.read_more_qr);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(context, R.style.CustomDialog)
+        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.MaterialDialog)
                 .setTitle(getString(R.string.QR_SCANNER))
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.action_accept), (dialog, which) -> {
@@ -452,7 +453,7 @@ public class QrReaderFragment extends FragmentGlobalAbstract implements ZXingSca
         // READ MORE
         message = message + "\n\n" + getString(R.string.read_more_qr);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(context, R.style.CustomDialog)
+        AlertDialog.Builder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.MaterialDialog)
                 .setTitle(getString(R.string.QR_SCANNER))
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.action_accept), (dialog, which) -> {

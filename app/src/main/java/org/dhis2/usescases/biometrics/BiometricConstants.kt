@@ -2,20 +2,4 @@ package org.dhis2.usescases.biometrics
 
 import org.dhis2.BuildConfig
 
-const val BIOMETRICS_ENABLED = BuildConfig.FLAVOR == "simprints"
-const val BIOMETRIC_VALUE = "biometrics"
-const val BIOMETRIC_VERIFICATION_VALUE = "biometrics verification"
-
-const val BIOMETRICS_ENROLL_REQUEST = 99
-const val BIOMETRICS_IDENTIFY_REQUEST = 199
-const val BIOMETRICS_VERIFY_REQUEST = 299
-const val BIOMETRICS_CONFIRM_IDENTITY_REQUEST = 399
-const val BIOMETRICS_ENROLL_LAST_REQUEST = 499
-const val BIOMETRICS_FAILURE_PATTERN = "$$$\$BIOMETRICS_FAILED$$$$"
-
-const val BIOMETRICS_GUID = "BIOMETRICS_GUID"
-const val BIOMETRICS_VERIFICATION_STATUS = "BIOMETRICS_VERIFICATION_STATUS"
-const val BIOMETRICS_TEI_ORGANISATION_UNIT = "BIOMETRICS_TEI_ORGANISATION_UNIT"
-
-const val BIOMETRICS_USER_NOT_FOUND = "user_not_found"
-
+const val BIOMETRICS_ENABLED:Boolean = BuildConfig.FLAVOR == "simprints"

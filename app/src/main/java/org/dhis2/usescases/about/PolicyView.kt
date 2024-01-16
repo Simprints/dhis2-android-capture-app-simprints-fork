@@ -1,13 +1,12 @@
 package org.dhis2.usescases.about
 
 import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
-import kotlinx.android.synthetic.main.activity_about_policy.view.menu
 import org.dhis2.R
 import org.dhis2.databinding.ActivityAboutPolicyBinding
-import org.dhis2.usescases.general.ActivityGlobalAbstract
 
-class PolicyView : ActivityGlobalAbstract() {
+class PolicyView : AppCompatActivity() {
 
     private lateinit var binding: ActivityAboutPolicyBinding
 

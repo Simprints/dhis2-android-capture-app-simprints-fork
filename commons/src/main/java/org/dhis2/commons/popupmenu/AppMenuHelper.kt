@@ -1,6 +1,7 @@
 package org.dhis2.commons.popupmenu
 
 import android.content.Context
+import android.os.Build
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
@@ -25,7 +26,11 @@ class AppMenuHelper private constructor(
 
     fun show() {
         val contextWrapper = ContextThemeWrapper(context, R.style.PopupMenuMarginStyle)
-        popupMenu = PopupMenu(contextWrapper, anchor, Gravity.END)
+        popupMenu = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            PopupMenu(contextWrapper, anchor, Gravity.END, 0, R.style.PopupMenuMarginStyle)
+        } else {
+            PopupMenu(contextWrapper, anchor, Gravity.END)
+        }
         try {
             val fields = popupMenu.javaClass.declaredFields
             for (field in fields) {
@@ -56,7 +61,7 @@ class AppMenuHelper private constructor(
         popupMenu.menu.findItem(id)?.icon = ContextCompat.getDrawable(this.context, icon)
     }
 
-    fun addIconToItemInvisible(@IdRes id: Int, @DrawableRes icon: Int){
+    fun addIconToItemInvisible(@IdRes id: Int, @DrawableRes icon: Int) {
         popupMenu.menu.findItem(id)?.icon = ContextCompat.getDrawable(this.context, icon)
         popupMenu.menu.findItem(id)?.icon?.alpha = 0
     }
@@ -94,15 +99,11 @@ class AppMenuHelper private constructor(
             this.anchor = view
         }
 
-        fun onMenuInflated(
-            onMenuInflated: (PopupMenu) -> Unit
-        ) = apply {
+        fun onMenuInflated(onMenuInflated: (PopupMenu) -> Unit) = apply {
             this.onMenuInflated = onMenuInflated
         }
 
-        fun onMenuItemClicked(
-            onMenuItemClicked: (Int) -> Boolean
-        ) = apply {
+        fun onMenuItemClicked(onMenuItemClicked: (Int) -> Boolean) = apply {
             this.onMenuItemClicked = onMenuItemClicked
         }
 

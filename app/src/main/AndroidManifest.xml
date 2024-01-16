@@ -1,23 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="org.dhis2">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:ignore="ScopedStorage" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <uses-feature
         android:name="android.hardware.sensor.accelerometer"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data
+                android:host="*"
+                android:scheme="smsto" />
+        </intent>
+
+    </queries>
 
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:fullBackupContent="@xml/old_backup_config"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
@@ -26,31 +51,19 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true"
-        tools:replace="allowBackup">
+        tools:replace="allowBackup"
+        tools:targetApi="s">
         <uses-library
             android:name="org.apache.http.legacy"
             android:required="false" />
 
         <meta-data
-            android:name="io.sentry.dsn"
-            android:value="${sentry_dsn}" />
-        <meta-data
-            android:name="io.sentry.environment"
-            android:value="${sentry_environment}" />
-        <meta-data
-            android:name="io.sentry.debug"
-            android:value="${sentry_debug}" />
-
-        <meta-data
-            android:name="io.sentry.traces.sample-rate"
-            android:value="${sentry_sample_rate}" />
-
-        <meta-data
-            android:name="io.sentry.traces.activity.enable"
+            android:name="io.sentry.auto-init"
             android:value="false" />
 
         <activity
             android:name=".usescases.splash.SplashActivity"
+            android:exported="true"
             android:theme="@style/SplashTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -79,19 +92,14 @@
         <activity android:name=".usescases.teiDashboard.TeiDashboardMobileActivity" />
         <activity android:name=".usescases.qrScanner.ScanActivity" />
         <activity android:name=".usescases.teiDashboard.teiProgramList.TeiProgramListActivity" />
-        <activity android:name="org.dhis2.uicomponents.map.views.MapSelectorActivity" />
+        <activity android:name="org.dhis2.maps.views.MapSelectorActivity" />
         <activity android:name=".usescases.programStageSelection.ProgramStageSelectionActivity" />
         <activity android:name=".utils.WebViewActivity" />
         <activity
             android:name=".usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity"
             android:windowSoftInputMode="stateHidden" />
-        <!--<activity android:name=".usescases.teiDashboard.TeiDashboardActivity" />-->
         <activity android:name=".usescases.qrCodes.QrActivity" />
         <activity android:name=".usescases.qrCodes.eventsworegistration.QrEventsWORegistrationActivity" />
-
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAGNpaLadezvuQFPLMpWEHqsTxLdNWhPGk" />
 
         <activity android:name=".usescases.datasets.datasetDetail.DataSetDetailActivity" />
         <activity android:name=".usescases.datasets.datasetInitial.DataSetInitialActivity" />
@@ -100,7 +108,9 @@
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
 
-        <receiver android:name=".widgets.DhisCustomLauncher">
+        <receiver
+            android:name=".widgets.DhisCustomLauncher"
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -114,24 +124,14 @@
         <activity
             android:name=".usescases.eventsWithoutRegistration.eventCapture.EventCaptureActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
+            android:windowSoftInputMode="adjustPan|stateHidden" />
         <activity android:name=".usescases.sync.SyncActivity" />
-        <activity android:name=".usescases.development.DevelopmentActivity" />
 
-        <service android:name=".usescases.sms.SmsSendingService" />
+        <service
+            android:name=".usescases.sms.SmsSendingService"
+            android:foregroundServiceType="dataSync" />
 
-        <activity android:name=".usescases.teiDashboard.nfcdata.NfcDataWriteActivity" />
         <activity android:name=".usescases.about.PolicyView" />
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="@string/content_provider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
 
         <activity
             android:name=".usescases.enrollment.EnrollmentActivity"
@@ -157,6 +157,27 @@
                 <data android:scheme="*" />
             </intent-filter>
         </activity>
+        <activity android:name=".usescases.login.accounts.AccountsActivity" />
+        <activity
+            android:name=".usescases.crash.CrashActivity"
+            android:exported="false"
+            android:process=":error_activity">
+            <intent-filter>
+                <action android:name="cat.ereza.customactivityoncrash.ERROR" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths"
+                tools:replace="android:resource" />
+        </provider>
     </application>
     <queries>
         <package android:name="com.simprints.id" />

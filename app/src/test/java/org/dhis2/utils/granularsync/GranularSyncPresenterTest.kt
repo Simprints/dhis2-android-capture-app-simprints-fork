@@ -1,359 +1,287 @@
 package org.dhis2.utils.granularsync
 
+import android.content.Context
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import com.nhaarman.mockitokotlin2.any
 import com.nhaarman.mockitokotlin2.doReturn
 import com.nhaarman.mockitokotlin2.mock
+import com.nhaarman.mockitokotlin2.times
+import com.nhaarman.mockitokotlin2.verify
 import com.nhaarman.mockitokotlin2.whenever
+import io.reactivex.Completable
 import io.reactivex.Single
-import java.time.Instant
-import java.util.Collections
 import java.util.Date
-import junit.framework.Assert.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import org.dhis2.commons.sync.ConflictType
+import org.dhis2.commons.sync.SyncContext
+import org.dhis2.commons.viewmodel.DispatcherProvider
 import org.dhis2.data.schedulers.TrampolineSchedulerProvider
 import org.dhis2.data.service.workManager.WorkManagerController
-import org.dhis2.usescases.settings.models.ErrorModelMapper
+import org.dhis2.usescases.sms.SmsSendingService
 import org.hisp.dhis.android.core.D2
-import org.hisp.dhis.android.core.arch.repositories.`object`.ReadOnlyOneObjectRepositoryFinalImpl
-import org.hisp.dhis.android.core.common.Access
-import org.hisp.dhis.android.core.common.DataAccess
-import org.hisp.dhis.android.core.common.FeatureType
-import org.hisp.dhis.android.core.common.ObjectWithUid
 import org.hisp.dhis.android.core.common.State
-import org.hisp.dhis.android.core.dataset.DataSetCompleteRegistration
-import org.hisp.dhis.android.core.imports.ImportStatus
-import org.hisp.dhis.android.core.imports.TrackerImportConflict
-import org.hisp.dhis.android.core.maintenance.D2Error
-import org.hisp.dhis.android.core.maintenance.D2ErrorCode
-import org.hisp.dhis.android.core.maintenance.ForeignKeyViolation
-import org.hisp.dhis.android.core.program.AccessLevel
-import org.hisp.dhis.android.core.program.Program
-import org.hisp.dhis.android.core.program.ProgramCollectionRepository
-import org.hisp.dhis.android.core.program.ProgramModule
-import org.hisp.dhis.android.core.program.ProgramType
-import org.hisp.dhis.android.core.trackedentity.TrackedEntityInstance
-import org.hisp.dhis.android.core.trackedentity.TrackedEntityType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
-import org.mockito.BDDMockito.then
 import org.mockito.Mockito
 import org.mockito.Mockito.mock
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class GranularSyncPresenterTest {
+
+    @get:Rule
+    var instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private val d2: D2 = mock(D2::class.java, Mockito.RETURNS_DEEP_STUBS)
     private val view = mock(GranularSyncContracts.View::class.java)
+    private val repository: GranularSyncRepository = mock()
     private val trampolineSchedulerProvider = TrampolineSchedulerProvider()
-    private val workManager = mock(WorkManagerController::class.java)
-    private val programRepoMock = mock(ReadOnlyOneObjectRepositoryFinalImpl::class.java)
-    private val errorMapper: ErrorModelMapper = ErrorModelMapper("%s %s %s %s")
-    private val testProgram = getProgram()
-
-    @Test
-    fun simplePresenterTest() {
-        // GIVEN
-        val presenter = GranularSyncPresenterImpl(
-            d2,
-            trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.PROGRAM,
-            "test_uid",
-            null,
-            null,
-            null,
-            workManager,
-            errorMapper
-        )
-        Mockito.`when`(d2.programModule()).thenReturn(mock(ProgramModule::class.java))
-        Mockito.`when`(d2.programModule().programs())
-            .thenReturn(mock(ProgramCollectionRepository::class.java))
-        Mockito.`when`(d2.programModule().programs().uid("test_uid"))
-            .thenReturn(programRepoMock as ReadOnlyOneObjectRepositoryFinalImpl<Program>?)
-        Mockito.`when`(d2.programModule().programs().uid("test_uid").get())
-            .thenReturn(Single.just(testProgram))
-        // WHEN
-        presenter.configure(view)
-        // THEN
-        then(view).should().showTitle("DISPLAY_NAME_FIRST")
+    private val testingDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher: DispatcherProvider = mock {
+        on { io() } doReturn testingDispatcher
+        on { ui() } doReturn testingDispatcher
     }
+    private val workManager = mock(WorkManagerController::class.java)
+    private val smsSyncProvider: SMSSyncProvider = mock()
+    private val context: Context = mock()
+    private val mockedSyncContext: SyncContext = mock()
 
     @Test
     fun `should return tracker program error state`() {
-        val presenter = GranularSyncPresenterImpl(
+        val presenter = GranularSyncPresenter(
             d2,
+            view,
+            repository,
             trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.PROGRAM,
-            "test_uid",
-            null,
-            null,
-            null,
+            testDispatcher,
+            SyncContext.TrackerProgram("test_uid"),
             workManager,
-            errorMapper
+            smsSyncProvider
         )
 
-        whenever(d2.programModule()) doReturn mock()
-        whenever(d2.programModule().programs()) doReturn mock()
-        whenever(d2.programModule().programs().uid("test_uid")) doReturn mock()
-        whenever(d2.programModule().programs().uid("test_uid").get()) doReturn Single.just(
-            getProgram()
+        val mockedState = SyncUiState(
+            syncState = State.ERROR,
+            title = "Title",
+            lastSyncDate = SyncDate(Date()),
+            message = "message",
+            mainActionLabel = "action 1",
+            secondaryActionLabel = "action 2",
+            content = emptyList()
         )
+        whenever(repository.getUiState()) doReturn mockedState
 
-        whenever(d2.trackedEntityModule()) doReturn mock()
-        whenever(d2.trackedEntityModule().trackedEntityInstances()) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityInstances().byProgramUids(
-                Collections.singletonList("test_uid")
-            )
-        ) doReturn mock()
-
-        whenever(
-            d2.trackedEntityModule().trackedEntityInstances().byProgramUids(
-                Collections.singletonList("test_uid")
-            ).byAggregatedSyncState()
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityInstances().byProgramUids(
-                Collections.singletonList("test_uid")
-            ).byAggregatedSyncState().`in`(State.ERROR)
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityInstances().byProgramUids(
-                Collections.singletonList("test_uid")
-            ).byAggregatedSyncState().`in`(State.ERROR).blockingGet()
-        ) doReturn getListOfTEIsWithError()
-        val testSubscriber = presenter.getState().test()
-
-        testSubscriber.assertSubscribed()
-        testSubscriber.assertValueCount(1)
-        testSubscriber.assertValue(State.ERROR)
+        presenter.refreshContent()
+        val result = presenter.currentState.value
+        assertEquals(mockedState, result)
     }
 
     @Test
-    fun `DataSet with ERROR completeRegistration should return ERROR from candidates`() {
+    fun `should block sms for some conflict types`() {
         whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid")
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid").blockingGet()
-        ) doReturn getMockedCompleteRegistrations(State.ERROR)
+            smsSyncProvider.isSMSEnabled(any())
+        ) doReturn true
 
-        val presenter = GranularSyncPresenterImpl(
-            d2,
-            trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.DATA_SET,
-            "data_set_uid",
-            null,
-            null,
-            null,
-            workManager,
-            errorMapper
+        val syncContexts = listOf(
+            SyncContext.Global(),
+            SyncContext.GlobalTrackerProgram(""),
+            SyncContext.TrackerProgram(""),
+            SyncContext.TrackerProgramTei(""),
+            SyncContext.Enrollment(""),
+            SyncContext.EnrollmentEvent("", ""),
+            SyncContext.GlobalEventProgram(""),
+            SyncContext.EventProgram(""),
+            SyncContext.Event(""),
+            SyncContext.GlobalDataSet(""),
+            SyncContext.DataSet(""),
+            SyncContext.DataSetInstance("", "", "", "")
         )
 
-        val state = presenter.getStateFromCanditates(arrayListOf())
-
-        assertTrue(state == State.ERROR)
+        syncContexts.map {
+            val enable = GranularSyncPresenter(
+                d2,
+                view,
+                repository,
+                trampolineSchedulerProvider,
+                testDispatcher,
+                it,
+                workManager,
+                smsSyncProvider
+            ).canSendSMS()
+            it to enable
+        }.forEach { (syncContext, canSendSMS) ->
+            val expected = when (syncContext.conflictType()) {
+                ConflictType.ALL -> false
+                ConflictType.PROGRAM -> false
+                ConflictType.TEI -> true
+                ConflictType.EVENT -> true
+                ConflictType.DATA_SET -> false
+                ConflictType.DATA_VALUES -> true
+            }
+            assertEquals(expected, canSendSMS)
+        }
     }
 
     @Test
-    fun `DataSet with TO_POST completeRegistration should return TO_UPDATE from candidates`() {
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid")
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid").blockingGet()
-        ) doReturn getMockedCompleteRegistrations(State.TO_POST)
-
-        val presenter = GranularSyncPresenterImpl(
+    fun shouldSmsSyncUsingPlayServices() {
+        val presenter = GranularSyncPresenter(
             d2,
+            view,
+            repository,
             trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.DATA_SET,
-            "data_set_uid",
-            null,
-            null,
-            null,
+            testDispatcher,
+            mockedSyncContext,
             workManager,
-            errorMapper
+            smsSyncProvider
         )
 
-        val state = presenter.getStateFromCanditates(arrayListOf())
+        val testingMsg = "testingMsg"
+        val testingGateway = "testingGateWay"
+        whenever(smsSyncProvider.isPlayServicesEnabled()) doReturn true
+        whenever(smsSyncProvider.getConvertTask()) doReturn Single.just(
+            ConvertTaskResult.Message(testingMsg)
+        )
+        whenever(smsSyncProvider.getGatewayNumber()) doReturn testingGateway
+        presenter.onSmsSyncClick { }
 
-        assertTrue(state == State.TO_UPDATE)
+        verify(smsSyncProvider, times(1)).getConvertTask()
+        verify(view, times(1)).openSmsApp(testingMsg, testingGateway)
     }
 
     @Test
-    fun `DataSet with TO_POST candidate should return TO_UPDATE from candidates`() {
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid()
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid")
-        ) doReturn mock()
-        whenever(
-            d2.dataSetModule().dataSetCompleteRegistrations()
-                .byDataSetUid().eq("data_set_uid").blockingGet()
-        ) doReturn arrayListOf()
-
-        val presenter = GranularSyncPresenterImpl(
+    fun shouldUnregisterReceiverIfSmsNotSent() {
+        val presenter = GranularSyncPresenter(
             d2,
+            view,
+            repository,
             trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.DATA_SET,
-            "data_set_uid",
-            null,
-            null,
-            null,
+            testDispatcher,
+            mockedSyncContext,
             workManager,
-            errorMapper
+            smsSyncProvider
         )
 
-        val state = presenter.getStateFromCanditates(arrayListOf(State.TO_POST))
-
-        assertTrue(state == State.TO_UPDATE)
+        presenter.onSmsNotManuallySent(context)
+        verify(smsSyncProvider).unregisterSMSReceiver(context)
     }
 
     @Test
-    fun `Should get list of sync errors order by date`() {
-        val presenter = GranularSyncPresenterImpl(
+    fun shouldInitDefaultSmsSync() {
+        val presenter = GranularSyncPresenter(
             d2,
+            view,
+            repository,
             trampolineSchedulerProvider,
-            SyncStatusDialog.ConflictType.PROGRAM,
-            "test_uid",
-            null,
-            null,
-            null,
+            testDispatcher,
+            mockedSyncContext,
             workManager,
-            errorMapper
+            smsSyncProvider
         )
 
+        whenever(smsSyncProvider.isPlayServicesEnabled()) doReturn false
+        whenever(view.checkSmsPermission()) doReturn true
         whenever(
-            d2.maintenanceModule().d2Errors().blockingGet()
-        ) doReturn arrayListOf(
-            D2Error.builder()
-                .created(Date.from(Instant.parse("2020-01-01T00:00:00.00Z")))
-                .errorCode(D2ErrorCode.API_RESPONSE_PROCESS_ERROR)
-                .httpErrorCode(500)
-                .errorDescription("ErrorDescription")
-                .build()
-        )
-        whenever(
-            d2.importModule().trackerImportConflicts().blockingGet()
-        ) doReturn arrayListOf(
-            TrackerImportConflict.builder()
-                .created(Date.from(Instant.parse("2020-01-01T00:00:00.00Z")))
-                .errorCode("API")
-                .displayDescription("DisplayDescription")
-                .conflict("Conflict")
-                .status(ImportStatus.ERROR)
-                .build()
-        )
-        whenever(
-            d2.maintenanceModule().foreignKeyViolations().blockingGet()
-        ) doReturn arrayListOf(
-            ForeignKeyViolation.builder()
-                .created(Date.from(Instant.parse("2020-01-02T12:00:00.00Z")))
-                .toTable("ToTable")
-                .fromTable("FromTable")
-                .notFoundValue("NotFoundValue")
-                .fromObjectUid("FromObjectUid")
-                .build()
-        )
+            smsSyncProvider.getConvertTask()
+        ) doReturn Single.just(ConvertTaskResult.Count(1))
+        whenever(smsSyncProvider.smsSender) doReturn mock()
+        whenever(smsSyncProvider.smsSender.submissionId) doReturn 1
+        var testingState: LiveData<List<SmsSendingService.SendingStatus>> =
+            MutableLiveData(emptyList())
 
-        val errors = presenter.syncErrors()
+        presenter.onSmsSyncClick {
+            testingState = it
+        }
 
-        assertTrue(errors.size == 3)
-        assertTrue(errors[0].errorCode == "500")
-        assertTrue(errors[1].errorCode == "FK")
-        assertTrue(errors[2].errorCode == "API")
-    }
-
-    private fun getMockedCompleteRegistrations(
-        testingState: State
-    ): MutableList<DataSetCompleteRegistration> {
-        return arrayListOf(
-            DataSetCompleteRegistration.builder()
-                .attributeOptionCombo("attr_opt_comb")
-                .dataSet("data_set_uid")
-                .date(Date())
-                .period("periodId")
-                .organisationUnit("org_unit")
-                .state(testingState)
-                .build(),
-            DataSetCompleteRegistration.builder()
-                .attributeOptionCombo("attr_opt_comb")
-                .dataSet("data_set_uid")
-                .date(Date())
-                .period("periodId")
-                .organisationUnit("org_unit")
-                .state(State.SYNCED)
-                .build()
+        assertTrue(testingState.value?.isNotEmpty() == true)
+        assertTrue(
+            testingState.value?.get(0)?.state == SmsSendingService.State.WAITING_COUNT_CONFIRMATION
         )
     }
 
-    private fun getListOfTEIsWithError(): MutableList<TrackedEntityInstance> {
-        return mutableListOf(
-            TrackedEntityInstance.builder()
-                .uid("tei_uid")
-                .organisationUnit("org_unit")
-                .trackedEntityType("te_type")
-                .state(State.ERROR)
-                .build()
+    @Test
+    fun shouldSetSmsSent() {
+        val presenter = GranularSyncPresenter(
+            d2,
+            view,
+            repository,
+            trampolineSchedulerProvider,
+            testDispatcher,
+            mockedSyncContext,
+            workManager,
+            smsSyncProvider
         )
+
+        whenever(smsSyncProvider.expectsResponseSMS()) doReturn false
+        whenever(smsSyncProvider.smsSender) doReturn mock()
+        whenever(smsSyncProvider.smsSender.markAsSentViaSMS()) doReturn Completable.complete()
+        presenter.onSmsManuallySent(context) {
+        }
+
+        verify(repository).getUiState()
     }
 
-    private fun getProgram(): Program {
-        return Program.builder()
-            .id(1L)
-            .version(1)
-            .onlyEnrollOnce(true)
-            .enrollmentDateLabel("enrollment_date_label")
-            .displayIncidentDate(false)
-            .incidentDateLabel("incident_date_label")
-            .registration(true)
-            .selectEnrollmentDatesInFuture(true)
-            .dataEntryMethod(false)
-            .ignoreOverdueEvents(false)
-            .selectIncidentDatesInFuture(true)
-            .useFirstStageDuringRegistration(true)
-            .displayFrontPageList(false)
-            .programType(ProgramType.WITH_REGISTRATION)
-            .relatedProgram(ObjectWithUid.create("program_uid"))
-            .trackedEntityType(TrackedEntityType.builder().uid("tracked_entity_type").build())
-            .categoryCombo(ObjectWithUid.create("category_combo_uid"))
-            .access(Access.create(true, true, DataAccess.create(true, true)))
-            .expiryDays(2)
-            .completeEventsExpiryDays(3)
-            .minAttributesRequiredToSearch(1)
-            .maxTeiCountToReturn(2)
-            .featureType(FeatureType.POINT)
-            .accessLevel(AccessLevel.PROTECTED)
-            .shortName("SHORT_NAME")
-            .displayShortName("DISPLAY_SHORT_NAME")
-            .description("DESCRIPTION")
-            .displayDescription("DISPLAY_DESCRIPTION")
-            .uid("test_uid")
-            .code("CODE")
-            .name("NAME")
-            .displayName("DISPLAY_NAME_FIRST")
-            .created(Date())
-            .lastUpdated(Date())
-            .build()
+    @Test
+    fun shouldWaitForSMSResponse() {
+        val presenter = GranularSyncPresenter(
+            d2,
+            view,
+            repository,
+            trampolineSchedulerProvider,
+            testDispatcher,
+            mockedSyncContext,
+            workManager,
+            smsSyncProvider
+        )
+
+        whenever(smsSyncProvider.expectsResponseSMS()) doReturn true
+        presenter.onSmsManuallySent(context) {
+        }
+
+        verify(repository, times(0)).getUiState()
+    }
+
+    @Test
+    fun shouldConfirmSmsReceived() {
+        val presenter = GranularSyncPresenter(
+            d2,
+            view,
+            repository,
+            trampolineSchedulerProvider,
+            testDispatcher,
+            mockedSyncContext,
+            workManager,
+            smsSyncProvider
+        )
+
+        whenever(smsSyncProvider.smsSender) doReturn mock()
+        whenever(smsSyncProvider.smsSender.markAsSentViaSMS()) doReturn mock()
+
+        presenter.onConfirmationMessageStateChanged(true)
+
+        verify(repository).getUiState()
+    }
+
+    @Test
+    fun shouldInformSmsWasNotReceived() {
+        val presenter = GranularSyncPresenter(
+            d2,
+            view,
+            repository,
+            trampolineSchedulerProvider,
+            testDispatcher,
+            mockedSyncContext,
+            workManager,
+            smsSyncProvider
+        )
+
+        whenever(smsSyncProvider.smsSender) doReturn mock()
+        whenever(smsSyncProvider.smsSender.markAsSentViaSMS()) doReturn mock()
+
+        presenter.onConfirmationMessageStateChanged(false)
+
+        verify(repository).getUiState()
     }
 }

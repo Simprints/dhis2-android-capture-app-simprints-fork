@@ -7,7 +7,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.simprints.libsimprints.*
 import org.dhis2.R
-import org.dhis2.usescases.biometrics.*
+import org.dhis2.commons.biometrics.*
 import timber.log.Timber
 
 sealed class RegisterResult {
@@ -28,6 +28,7 @@ sealed class VerifyResult {
     object NoMatch : VerifyResult()
     object Failure : VerifyResult()
 }
+
 
 class BiometricsClient(
     projectId: String,
@@ -51,7 +52,20 @@ class BiometricsClient(
 
         val intent = simHelper.register(moduleId)
 
-        checkSimprintsApp(activity, intent, BIOMETRICS_ENROLL_REQUEST)
+        launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_ENROLL_REQUEST)
+    }
+
+    fun registerFromFragment(fragment: Fragment, moduleId: String, extras: Map<String, String>) {
+        Timber.d("Biometrics register!")
+        Timber.d("moduleId: $moduleId")
+        printExtras(extras)
+
+        val intent = simHelper.register(moduleId)
+        extras.forEach { intent.putExtra(it.key, it.value) }
+
+        if (fragment.context != null) {
+            launchSimprintsAppFromFragment(fragment,intent,BIOMETRICS_ENROLL_REQUEST)
+        }
     }
 
     fun identify(activity: Activity) {
@@ -60,10 +74,10 @@ class BiometricsClient(
 
         val intent = simHelper.identify(defaultModuleId)
 
-        checkSimprintsApp(activity, intent, BIOMETRICS_IDENTIFY_REQUEST)
+        launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_IDENTIFY_REQUEST)
     }
 
-    fun verify(fragment: Fragment, guid: String, moduleId: String) {
+    fun verify(fragment: Fragment, guid: String, moduleId: String, extras: Map<String, String>) {
         if (guid == null) {
             Timber.i("Simprints Verification - Guid is Null - Please check again!")
             return
@@ -71,13 +85,17 @@ class BiometricsClient(
 
         Timber.d("Biometrics verify!")
         Timber.d("moduleId: $moduleId")
+        printExtras(extras)
 
         val intent = simHelper.verify(moduleId, guid)
 
+        extras.forEach { intent.putExtra(it.key, it.value) }
+
         if (fragment.context != null) {
-            fragment.startActivityForResult(intent, BIOMETRICS_VERIFY_REQUEST)
+            launchSimprintsAppFromFragment(fragment,intent,BIOMETRICS_VERIFY_REQUEST)
         }
     }
+
 
     fun handleRegisterResponse(data: Intent): RegisterResult {
         val biometricsCompleted = checkBiometricsCompleted(data)
@@ -89,7 +107,7 @@ class BiometricsClient(
             if (registration == null) {
                 RegisterResult.Failure
             } else {
-                RegisterResult.Completed(registration?.guid)
+                RegisterResult.Completed(registration.guid)
             }
         }
 
@@ -102,12 +120,15 @@ class BiometricsClient(
                         identifyResponse.sessionId
                     )
                 }
+
                 is IdentifyResult.BiometricsDeclined -> {
                     RegisterResult.Failure
                 }
+
                 is IdentifyResult.UserNotFound -> {
                     handleRegister()
                 }
+
                 is IdentifyResult.Failure -> {
                     RegisterResult.Failure
                 }
@@ -119,9 +140,11 @@ class BiometricsClient(
                 data.hasExtra(Constants.SIMPRINTS_IDENTIFICATIONS) -> {
                     handlePossibleDuplicates()
                 }
+
                 data.hasExtra(Constants.SIMPRINTS_REGISTRATION) -> {
                     handleRegister()
                 }
+
                 else -> {
                     RegisterResult.Failure
                 }
@@ -180,6 +203,7 @@ class BiometricsClient(
                             VerifyResult.NoMatch
                         }
                     }
+
                     Tier.TIER_5 -> VerifyResult.NoMatch
                 }
             } else {
@@ -190,28 +214,40 @@ class BiometricsClient(
         }
     }
 
-    fun confirmIdentify(activity: Activity, sessionId: String, guid: String) {
+    fun confirmIdentify(
+        activity: Activity,
+        sessionId: String,
+        guid: String,
+        extras: Map<String, String>
+    ) {
         Timber.d("Biometrics confirmIdentify!")
         Timber.d("sessionId: $sessionId")
         Timber.d("guid: $guid")
+        printExtras(extras)
 
         val intent = simHelper.confirmIdentity(activity, sessionId, guid)
 
-        checkSimprintsApp(activity, intent, BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
+        extras.forEach { intent.putExtra(it.key, it.value) }
+
+        launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
     }
 
-    fun confirmIdentify(fragment: Fragment, sessionId: String, guid: String) {
+    fun confirmIdentify(
+        fragment: Fragment,
+        sessionId: String,
+        guid: String,
+        extras: Map<String, String>
+    ) {
         Timber.d("Biometrics confirmIdentify!")
         Timber.d("sessionId: $sessionId")
         Timber.d("guid: $guid")
+        printExtras(extras)
 
         val intent = simHelper.confirmIdentity(fragment.requireContext(), sessionId, guid)
 
-        try {
-            fragment.startActivityForResult(intent, BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
-        } catch (ex: ActivityNotFoundException){
-            fragment.context?.let { Toast.makeText(it, R.string.biometrics_download_app, Toast.LENGTH_SHORT).show() }
-        }
+        extras.forEach { intent.putExtra(it.key, it.value) }
+
+        launchSimprintsAppFromFragment(fragment,intent,BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
     }
 
     fun noneSelected(activity: Activity, sessionId: String) {
@@ -221,7 +257,7 @@ class BiometricsClient(
 
         val intent = simHelper.confirmIdentity(activity, sessionId, "none_selected")
 
-        checkSimprintsApp(activity, intent, BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
+        launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_CONFIRM_IDENTITY_REQUEST)
     }
 
     fun registerLast(activity: Activity, sessionId: String) {
@@ -231,17 +267,43 @@ class BiometricsClient(
 
         val intent = simHelper.registerLastBiometrics(defaultModuleId, sessionId)
 
-        checkSimprintsApp(activity, intent, BIOMETRICS_ENROLL_LAST_REQUEST)
+        launchSimprintsAppFromActivity(activity, intent, BIOMETRICS_ENROLL_LAST_REQUEST)
     }
 
     private fun checkBiometricsCompleted(data: Intent) =
         data.getBooleanExtra(Constants.SIMPRINTS_BIOMETRICS_COMPLETE_CHECK, false)
 
-    private fun checkSimprintsApp(activity: Activity, intent: Intent, requestCode: Int) {
+    private fun launchSimprintsAppFromActivity(activity: Activity, intent: Intent, requestCode: Int) {
         try {
             activity.startActivityForResult(intent, requestCode)
         } catch (ex: ActivityNotFoundException){
             Toast.makeText(activity, R.string.biometrics_download_app, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun launchSimprintsAppFromFragment(fragment: Fragment, intent: Intent, requestCode: Int) {
+        try {
+            fragment.startActivityForResult(intent, requestCode)
+        } catch (ex: ActivityNotFoundException){
+            fragment.context?.let { Toast.makeText(it, R.string.biometrics_download_app, Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    private fun printExtras(extras: Map<String, String>) {
+        Timber.d(
+            "extras: ${
+                extras.entries.joinToString(
+                    prefix = "[",
+                    separator = ", ",
+                    postfix = "]",
+                    limit = 2,
+                    truncated = "..."
+                )
+            }"
+        )
+    }
+
+    companion object {
+        const val SIMPRINTS_TRACKED_ENTITY_INSTANCE_ID = "trackedEntityInstanceId"
     }
 }

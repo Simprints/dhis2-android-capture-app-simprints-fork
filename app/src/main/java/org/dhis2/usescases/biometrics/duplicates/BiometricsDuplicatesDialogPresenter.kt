@@ -52,7 +52,6 @@ class BiometricsDuplicatesDialogPresenter(
                 searchRepository.searchTrackedEntities(
                     SearchParametersModel(
                         program,
-                        trackedEntityTypeUid,
                         hashMapOf(biometricsAttributeUid to biometricsGuids.joinToString(separator = ";"))
                     ),
                     NetworkUtils.isOnline(view.getContext())
@@ -98,7 +97,7 @@ class BiometricsDuplicatesDialogPresenter(
             guid,
             teiUid,
             enrollmentUid,
-            isOnline
+            isOnline,
         )
     }
 

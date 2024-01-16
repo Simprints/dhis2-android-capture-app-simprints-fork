@@ -7,9 +7,9 @@ import androidx.fragment.app.FragmentManager
 import androidx.paging.PagedListAdapter
 import androidx.recyclerview.widget.DiffUtil
 import org.dhis2.R
+import org.dhis2.commons.data.SearchTeiModel
+import org.dhis2.commons.dialogs.imagedetail.ImageDetailBottomDialog
 import org.dhis2.databinding.ItemSearchTrackedEntityBinding
-import org.dhis2.usescases.searchTrackEntity.adapters.SearchTeiModel
-import org.dhis2.utils.customviews.ImageDetailBottomDialog
 import java.io.File
 
 class BiometricsDuplicatesDialogAdapter(

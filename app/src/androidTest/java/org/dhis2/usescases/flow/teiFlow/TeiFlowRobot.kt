@@ -1,5 +1,6 @@
 package org.dhis2.usescases.flow.teiFlow
 
+import androidx.compose.ui.test.junit4.ComposeTestRule
 import org.dhis2.common.BaseRobot
 import org.dhis2.usescases.flow.teiFlow.entity.DateRegistrationUIModel
 import org.dhis2.usescases.searchte.robot.searchTeiRobot
@@ -27,8 +28,8 @@ class TeiFlowRobot : BaseRobot() {
             clickOnDateField()
             selectSpecificDate(registrationDate.year, registrationDate.month, registrationDate.day)
             acceptDate()
-            clickOnFab()
-            clickOnFab()
+            clickOnSearch()
+            clickOnEnroll()
             selectSpecificDate(enrollmentDate.year, enrollmentDate.month, enrollmentDate.day)
             acceptDate()
         }
@@ -38,16 +39,15 @@ class TeiFlowRobot : BaseRobot() {
         }
     }
 
-    fun enrollToProgram(program: String) {
+    fun enrollToProgram(composeTestRule: ComposeTestRule, program: String) {
         teiDashboardRobot {
             clickOnMenuMoreOptions()
             clickOnMenuProgramEnrollments()
         }
 
         enrollmentRobot {
-            clickOnSameProgramForEnrollment(program)
+            clickOnAProgramForEnrollment(composeTestRule, program)
             clickOnAcceptEnrollmentDate()
-            waitToDebounce(5000)
             scrollToBottomProgramForm()
             clickOnSaveEnrollment()
         }
@@ -60,6 +60,7 @@ class TeiFlowRobot : BaseRobot() {
         }
 
         enrollmentRobot {
+            waitToDebounce(1000)
             checkActiveAndPastEnrollmentDetails(enrollmentDetails)
         }
     }

@@ -3,42 +3,33 @@ package org.dhis2.usescases.enrollment
 import com.nhaarman.mockitokotlin2.doReturn
 import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.never
-import com.nhaarman.mockitokotlin2.times
 import com.nhaarman.mockitokotlin2.verify
-import com.nhaarman.mockitokotlin2.verifyZeroInteractions
 import com.nhaarman.mockitokotlin2.whenever
-import io.reactivex.Flowable
-import io.reactivex.processors.FlowableProcessor
 import io.reactivex.processors.PublishProcessor
+import org.dhis2.commons.matomo.MatomoAnalyticsController
 import org.dhis2.commons.schedulers.SchedulerProvider
-import org.dhis2.data.forms.dataentry.EnrollmentRepository
-import org.dhis2.data.forms.dataentry.ValueStore
-import org.dhis2.data.forms.dataentry.fields.edittext.EditTextViewModel
 import org.dhis2.data.schedulers.TrampolineSchedulerProvider
-import org.dhis2.form.model.StoreResult
-import org.dhis2.form.model.ValueStoreResult
-import org.dhis2.utils.Result
+import org.dhis2.form.data.EnrollmentRepository
+import org.dhis2.usescases.teiDashboard.TeiAttributesProvider
 import org.dhis2.utils.analytics.AnalyticsHelper
-import org.dhis2.utils.analytics.matomo.MatomoAnalyticsController
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.repositories.`object`.ReadOnlyOneObjectRepositoryFinalImpl
 import org.hisp.dhis.android.core.category.CategoryCombo
 import org.hisp.dhis.android.core.common.Access
 import org.hisp.dhis.android.core.common.DataAccess
 import org.hisp.dhis.android.core.common.FeatureType
-import org.hisp.dhis.android.core.common.ObjectStyle
+import org.hisp.dhis.android.core.common.Geometry
 import org.hisp.dhis.android.core.common.ObjectWithUid
-import org.hisp.dhis.android.core.common.ValueType
+import org.hisp.dhis.android.core.enrollment.EnrollmentAccess
 import org.hisp.dhis.android.core.enrollment.EnrollmentObjectRepository
 import org.hisp.dhis.android.core.enrollment.EnrollmentStatus
 import org.hisp.dhis.android.core.event.Event
+import org.hisp.dhis.android.core.event.EventCollectionRepository
+import org.hisp.dhis.android.core.event.EventStatus
 import org.hisp.dhis.android.core.program.Program
 import org.hisp.dhis.android.core.program.ProgramStage
-import org.hisp.dhis.android.core.trackedentity.TrackedEntityAttributeValue
+import org.hisp.dhis.android.core.trackedentity.TrackedEntityInstance
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityInstanceObjectRepository
-import org.hisp.dhis.rules.models.RuleActionShowError
-import org.hisp.dhis.rules.models.RuleEffect
-import org.junit.Assert
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito
@@ -54,10 +45,10 @@ class EnrollmentPresenterImplTest {
     private val d2: D2 = Mockito.mock(D2::class.java, Mockito.RETURNS_DEEP_STUBS)
     private val enrollmentRepository: EnrollmentObjectRepository = mock()
     private val schedulers: SchedulerProvider = TrampolineSchedulerProvider()
-    private val valueStore: ValueStore = mock()
     private val analyticsHelper: AnalyticsHelper = mock()
-    private val sectionProcessor: FlowableProcessor<String> = mock()
     private val matomoAnalyticsController: MatomoAnalyticsController = mock()
+    private val eventCollectionRepository: EventCollectionRepository = mock()
+    private val teiAttributesProvider: TeiAttributesProvider = mock()
 
     @Before
     fun setUp() {
@@ -70,112 +61,11 @@ class EnrollmentPresenterImplTest {
             programRepository,
             schedulers,
             enrollmentFormRepository,
-            valueStore,
             analyticsHelper,
-            "This field is mandatory",
-            sectionProcessor,
-            matomoAnalyticsController
+            matomoAnalyticsController,
+            eventCollectionRepository,
+            teiAttributesProvider
         )
-    }
-
-    @Test
-    fun `Missing and errors fields should show mandatory fields dialog`() {
-        val fields = arrayListOf(
-            dummyEditTextViewModel("uid1", "missing_mandatory_field", mandatory = true)
-        )
-
-        mockTrackedEntityAttributes()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributes().uid("uid1").blockingGet().unique()
-        ) doReturn false
-
-        presenter.setFieldsToShow(
-            "testSection",
-            fields
-        )
-        val checkWthErrors = presenter.dataIntegrityCheck()
-
-        Assert.assertFalse(checkWthErrors)
-        val map = mutableMapOf("missing_mandatory_field" to "testSection")
-        verify(enrollmentView, times(1)).showMissingMandatoryFieldsMessage(map)
-    }
-
-    @Test
-    fun `Missing fields should show mandatory fields dialog`() {
-        val fields = arrayListOf(
-            dummyEditTextViewModel("uid1", "missing_mandatory_field", mandatory = true),
-            dummyEditTextViewModel("uid2", "error_field").withError("Error")
-        )
-
-        whenever(d2.trackedEntityModule()) doReturn mock()
-        whenever(d2.trackedEntityModule().trackedEntityAttributes()) doReturn mock()
-        fields.forEach {
-            whenever(
-                d2.trackedEntityModule().trackedEntityAttributes().uid(it.uid())
-            ) doReturn mock()
-            whenever(
-                d2.trackedEntityModule().trackedEntityAttributes().uid(it.uid()).blockingGet()
-            ) doReturn mock()
-            whenever(
-                d2.trackedEntityModule().trackedEntityAttributes()
-                    .uid(it.uid()).blockingGet().unique()
-            ) doReturn false
-        }
-
-        presenter.setFieldsToShow("testSection", fields)
-        val checkWthErrors = presenter.dataIntegrityCheck()
-
-        Assert.assertFalse(checkWthErrors)
-        val map = mutableMapOf("missing_mandatory_field" to "testSection")
-        verify(enrollmentView, times(1)).showMissingMandatoryFieldsMessage(map)
-    }
-
-    @Test
-    fun `Error fields should show mandatory fields dialog`() {
-        val fields = arrayListOf(dummyEditTextViewModel("uid1", "error_field"))
-        val calcResult = Result.success(
-            listOf(
-                RuleEffect.create(
-                    "ruleUid",
-                    RuleActionShowError.create("content", "error_field", "uid1"),
-                    "data"
-                )
-            )
-        )
-        mockTrackedEntityAttributes()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributes().uid("uid1").blockingGet().unique()
-        ) doReturn false
-
-        presenter.applyRuleEffects(fields, calcResult)
-        val checkWthErrors = presenter.dataIntegrityCheck()
-
-        Assert.assertFalse(checkWthErrors)
-        verify(enrollmentView, times(1)).showErrorFieldsMessage(arrayListOf("content data"))
-    }
-
-    @Test
-    fun `should not show dialog if no coincidence is found in a unique attribute`() {
-        val fields = arrayListOf(
-            dummyEditTextViewModel("uid1", "field", value = "value")
-        )
-        mockTrackedEntityAttributes()
-        mockTrackedEntityAttributeValues()
-
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributes().uid("uid1").blockingGet().unique()
-        ) doReturn true
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues()
-                .byTrackedEntityAttribute().eq("uid1")
-                .byValue().eq("value")
-                .blockingGet()
-        ) doReturn listOf(TrackedEntityAttributeValue.builder().value("1").build())
-
-        presenter.setFieldsToShow("testSection", fields)
-        val checkUnique = presenter.dataIntegrityCheck()
-
-        assert(checkUnique)
     }
 
     @Test
@@ -233,25 +123,6 @@ class EnrollmentPresenterImplTest {
     }
 
     @Test
-    fun `Save file should use valueStore`() {
-        whenever(valueStore.save("uid", "fileValue")) doReturn Flowable.just(
-            StoreResult(
-                "uid",
-                ValueStoreResult.VALUE_CHANGED
-            )
-        )
-        presenter.saveFile("uid", "fileValue")
-        verify(valueStore, times(1)).save("uid", "fileValue")
-    }
-
-    @Test
-    fun `Check data integrity when mandatory is true and has error is false`() {
-        val result = presenter.dataIntegrityCheck()
-        verifyZeroInteractions(enrollmentView)
-        Assert.assertTrue(result)
-    }
-
-    @Test
     fun `Should update the fields flowable`() {
         val processor = PublishProcessor.create<Boolean>()
         val testSubscriber = processor.test()
@@ -289,6 +160,79 @@ class EnrollmentPresenterImplTest {
         verify(enrollmentView, never()).displayTeiPicture(path)
     }
 
+    @Test
+    fun `Should show save button when the enrollment is editable`() {
+        val geometry = Geometry.builder()
+            .coordinates("[-30.00, 11.00]")
+            .type(FeatureType.POINT)
+            .build()
+        val tei = TrackedEntityInstance.builder().geometry(geometry).uid("random").build()
+        val program = Program.builder().uid("tUID").build()
+
+        whenever(teiRepository.blockingGet()) doReturn tei
+        whenever(programRepository.blockingGet()) doReturn program
+        whenever(d2.enrollmentModule()) doReturn mock()
+        whenever(d2.enrollmentModule().enrollmentService()) doReturn mock()
+        whenever(
+            d2.enrollmentModule().enrollmentService()
+                .blockingGetEnrollmentAccess(tei.uid(), program.uid())
+        ) doReturn EnrollmentAccess.WRITE_ACCESS
+
+        presenter.showOrHideSaveButton()
+
+        verify(enrollmentView).setSaveButtonVisible(true)
+    }
+
+    @Test
+    fun `Should hide save button when the enrollment is not editable`() {
+        val geometry = Geometry.builder()
+            .coordinates("[-30.00, 11.00]")
+            .type(FeatureType.POINT)
+            .build()
+        val tei = TrackedEntityInstance.builder().geometry(geometry).uid("random").build()
+        val program = Program.builder().uid("tUID").build()
+
+        whenever(teiRepository.blockingGet()) doReturn tei
+        whenever(programRepository.blockingGet()) doReturn program
+        whenever(d2.enrollmentModule()) doReturn mock()
+        whenever(d2.enrollmentModule().enrollmentService()) doReturn mock()
+        whenever(
+            d2.enrollmentModule().enrollmentService()
+                .blockingGetEnrollmentAccess(tei.uid(), program.uid())
+        ) doReturn EnrollmentAccess.NO_ACCESS
+
+        presenter.showOrHideSaveButton()
+
+        verify(enrollmentView).setSaveButtonVisible(false)
+    }
+
+    @Test
+    fun `Should return true if event status is SCHEDULE`() {
+        val event = Event.builder().uid("uid").status(EventStatus.SCHEDULE).build()
+
+        whenever(eventCollectionRepository.uid("uid")) doReturn mock()
+        whenever(eventCollectionRepository.uid("uid").blockingGet()) doReturn event
+        assert(presenter.isEventScheduleOrSkipped("uid"))
+    }
+
+    @Test
+    fun `Should return true if event status is SKIPPED`() {
+        val event = Event.builder().uid("uid").status(EventStatus.SKIPPED).build()
+
+        whenever(eventCollectionRepository.uid("uid")) doReturn mock()
+        whenever(eventCollectionRepository.uid("uid").blockingGet()) doReturn event
+        assert(presenter.isEventScheduleOrSkipped("uid"))
+    }
+
+    @Test
+    fun `Should return false if event status is ACTIVE`() {
+        val event = Event.builder().uid("uid").status(EventStatus.ACTIVE).build()
+
+        whenever(eventCollectionRepository.uid("uid")) doReturn mock()
+        whenever(eventCollectionRepository.uid("uid").blockingGet()) doReturn event
+        assert(!presenter.isEventScheduleOrSkipped("uid"))
+    }
+
     private fun checkCatCombo(catCombo: Boolean, featureType: FeatureType) {
         whenever(programRepository.blockingGet()) doReturn Program.builder().uid("")
             .categoryCombo(ObjectWithUid.create("")).build()
@@ -315,65 +259,5 @@ class EnrollmentPresenterImplTest {
             .isDefault(catCombo)
             .uid("")
             .build()
-    }
-
-    private fun dummyEditTextViewModel(
-        uid: String,
-        label: String,
-        value: String? = null,
-        mandatory: Boolean = false
-    ) =
-        EditTextViewModel.create(
-            uid,
-            1,
-            label,
-            mandatory,
-            value,
-            "",
-            1,
-            ValueType.TEXT,
-            "testSection",
-            true,
-            null,
-            null,
-            ObjectStyle.builder().build(),
-            null,
-            "any",
-            false,
-            false,
-            null,
-            null
-        )
-
-    private fun mockTrackedEntityAttributes() {
-        whenever(d2.trackedEntityModule()) doReturn mock()
-        whenever(d2.trackedEntityModule().trackedEntityAttributes()) doReturn mock()
-        whenever(d2.trackedEntityModule().trackedEntityAttributes().uid("uid1")) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributes().uid("uid1").blockingGet()
-        ) doReturn mock()
-    }
-
-    private fun mockTrackedEntityAttributeValues() {
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues()
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues().byTrackedEntityAttribute()
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues()
-                .byTrackedEntityAttribute().eq("uid1")
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues()
-                .byTrackedEntityAttribute().eq("uid1")
-                .byValue()
-        ) doReturn mock()
-        whenever(
-            d2.trackedEntityModule().trackedEntityAttributeValues()
-                .byTrackedEntityAttribute().eq("uid1")
-                .byValue().eq("value")
-        ) doReturn mock()
     }
 }

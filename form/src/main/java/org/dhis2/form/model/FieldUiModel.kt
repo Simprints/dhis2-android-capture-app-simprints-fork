@@ -3,8 +3,10 @@ package org.dhis2.form.model
 import org.dhis2.form.ui.event.RecyclerViewUiEvents
 import org.dhis2.form.ui.event.UiEventFactory
 import org.dhis2.form.ui.intent.FormIntent
+import org.dhis2.form.ui.style.FormUiModelColorFactoryImpl
 import org.dhis2.form.ui.style.FormUiModelStyle
 import org.hisp.dhis.android.core.common.ValueType
+import org.hisp.dhis.android.core.option.Option
 
 interface FieldUiModel {
 
@@ -48,6 +50,26 @@ interface FieldUiModel {
 
     val displayName: String?
 
+    val textColor: Int?
+
+    val backGroundColor: Pair<Array<Int>, Int>?
+
+    val renderingType: UiRenderType?
+
+    var optionSetConfiguration: OptionSetConfiguration?
+
+    val hasImage: Boolean
+
+    val keyboardActionType: KeyboardActionType?
+
+    val fieldMask: String?
+
+    val isAffirmativeChecked: Boolean
+
+    val isNegativeChecked: Boolean
+
+    val isLoadingData: Boolean
+
     fun setCallback(callback: Callback)
 
     fun equals(item: FieldUiModel): Boolean
@@ -56,15 +78,25 @@ interface FieldUiModel {
 
     fun onNext()
 
-    fun onTextChange(value: String?)
+    fun onTextChange(value: CharSequence?)
 
     fun onDescriptionClick()
 
     fun onClear()
 
-    fun invokeUiEvent()
+    fun onSave(value: String?)
+
+    fun onSaveBoolean(boolean: Boolean)
+
+    fun onSaveOption(option: Option)
+
+    fun invokeUiEvent(uiEventType: UiEventType)
+
+    fun invokeIntent(intent: FormIntent)
 
     fun setValue(value: String?): FieldUiModel
+
+    fun setIsLoadingData(isLoadingData: Boolean): FieldUiModel
 
     fun setFocus(): FieldUiModel
 
@@ -80,9 +112,14 @@ interface FieldUiModel {
 
     fun setDisplayName(displayName: String?): FieldUiModel
 
+    fun setKeyBoardActionDone(): FieldUiModel
 
     interface Callback {
         fun intent(intent: FormIntent)
         fun recyclerViewUiEvents(uiEvent: RecyclerViewUiEvents)
     }
+
+    fun isSection() = this is SectionUiModelImpl
+
+    fun isSectionWithFields(): Boolean
 }

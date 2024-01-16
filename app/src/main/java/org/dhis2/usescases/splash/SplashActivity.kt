@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.databinding.DataBindingUtil
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.scottyab.rootbeer.RootBeer
 import javax.inject.Inject
 import javax.inject.Named
@@ -88,7 +89,7 @@ class SplashActivity : ActivityGlobalAbstract(), SplashView {
     }
 
     private fun showRootedDialog(title: String, message: String) {
-        alertDialog = AlertDialog.Builder(activity).create()
+        alertDialog = MaterialAlertDialogBuilder(activity, R.style.MaterialDialog).create()
         if (!alertDialog.isShowing) {
             // TITLE
             val titleView =
@@ -114,14 +115,35 @@ class SplashActivity : ActivityGlobalAbstract(), SplashView {
     override fun goToNextScreen(
         isUserLogged: Boolean,
         sessionLocked: Boolean,
-        initialSyncDone: Boolean
+        initialSyncDone: Boolean,
+        initialDataSyncDone: Boolean
     ) {
         if (isUserLogged && initialSyncDone && !sessionLocked) {
-            startActivity(MainActivity::class.java, null, true, true, null)
+            startActivity(
+                MainActivity::class.java,
+                MainActivity.bundle(launchDataSync = initialDataSyncDone),
+                true,
+                true,
+                null
+            )
         } else if (isUserLogged && !initialSyncDone) {
-            startActivity(SyncActivity::class.java, null, true, true, null)
+            startActivity(
+                SyncActivity::class.java,
+                null,
+                true,
+                true,
+                null
+            )
         } else {
-            startActivity(LoginActivity::class.java, null, true, true, null)
+            startActivity(
+                LoginActivity::class.java,
+                LoginActivity.bundle(
+                    accountsCount = presenter.getAccounts()
+                ),
+                true,
+                true,
+                null
+            )
         }
     }
 

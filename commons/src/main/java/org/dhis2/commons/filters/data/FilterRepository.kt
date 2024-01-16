@@ -10,6 +10,7 @@ import org.dhis2.commons.filters.EnrollmentStatusFilter
 import org.dhis2.commons.filters.EventStatusFilter
 import org.dhis2.commons.filters.FilterItem
 import org.dhis2.commons.filters.FilterManager
+import org.dhis2.commons.filters.FilterResources
 import org.dhis2.commons.filters.Filters
 import org.dhis2.commons.filters.FollowUpFilter
 import org.dhis2.commons.filters.OrgUnitFilter
@@ -17,8 +18,13 @@ import org.dhis2.commons.filters.PeriodFilter
 import org.dhis2.commons.filters.SyncStateFilter
 import org.dhis2.commons.filters.WorkingListFilter
 import org.dhis2.commons.filters.sorting.SortingItem
+import org.dhis2.commons.filters.workingLists.EventFilterToWorkingListItemMapper
+import org.dhis2.commons.filters.workingLists.EventWorkingList
+import org.dhis2.commons.filters.workingLists.ProgramStageToWorkingListItemMapper
+import org.dhis2.commons.filters.workingLists.ProgramStageWorkingList
+import org.dhis2.commons.filters.workingLists.TeiFilterToWorkingListItemMapper
+import org.dhis2.commons.filters.workingLists.TrackedEntityInstanceWorkingList
 import org.dhis2.commons.filters.workingLists.WorkingListItem
-import org.dhis2.commons.resources.ResourceManager
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.arch.repositories.scope.RepositoryScope
 import org.hisp.dhis.android.core.category.CategoryOptionCombo
@@ -43,8 +49,11 @@ data class TextFilter(val dataElement: String, val text: String)
 
 class FilterRepository @Inject constructor(
     private val d2: D2,
-    val resources: ResourceManager,
-    private val getFiltersApplyingWebAppConfig: GetFiltersApplyingWebAppConfig
+    val resources: FilterResources,
+    private val getFiltersApplyingWebAppConfig: GetFiltersApplyingWebAppConfig,
+    private val eventFilterToWorkingListItemMapper: EventFilterToWorkingListItemMapper,
+    private val teiFilterToWorkingListItemMapper: TeiFilterToWorkingListItemMapper,
+    private val programStageToWorkingListItemMapper: ProgramStageToWorkingListItemMapper
 ) {
 
     private val observableSortingInject = ObservableField<SortingItem>()
@@ -287,11 +296,10 @@ class FilterRepository @Inject constructor(
         return repository.byPeriodStartDate().inDatePeriods(datePeriods)
     }
 
-    fun orgUnitsByName(name: String): List<OrganisationUnit> =
-        d2.organisationUnitModule()
-            .organisationUnits()
-            .byDisplayName().like("%$name%")
-            .blockingGet()
+    fun orgUnitsByName(name: String): List<OrganisationUnit> = d2.organisationUnitModule()
+        .organisationUnits()
+        .byDisplayName().like("%$name%")
+        .blockingGet()
 
     fun programFilters(programUid: String): List<FilterItem> {
         return d2.programModule().programs().uid(programUid).get()
@@ -347,13 +355,13 @@ class FilterRepository @Inject constructor(
                 org.dhis2.commons.filters.ProgramType.TRACKER,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterOrgUnitLabel()
+                resources.filterOrgUnitLabel()
             ),
             ProgramFilter.SYNC_STATUS to SyncStateFilter(
                 org.dhis2.commons.filters.ProgramType.TRACKER,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterSyncLabel()
+                resources.filterSyncLabel()
             )
         )
     }
@@ -386,20 +394,20 @@ class FilterRepository @Inject constructor(
                 org.dhis2.commons.filters.ProgramType.DATASET,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterPeriodLabel()
+                resources.filterPeriodLabel()
             ),
             DataSetFilter.ORG_UNIT to OrgUnitFilter(
                 FilterManager.getInstance().observeOrgUnitFilters(),
                 org.dhis2.commons.filters.ProgramType.DATASET,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterOrgUnitLabel()
+                resources.filterOrgUnitLabel()
             ),
             DataSetFilter.SYNC_STATUS to SyncStateFilter(
                 org.dhis2.commons.filters.ProgramType.DATASET,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterSyncLabel()
+                resources.filterSyncLabel()
             )
         )
 
@@ -445,20 +453,22 @@ class FilterRepository @Inject constructor(
         val homeFilter = linkedMapOf(
             HomeFilter.DATE to PeriodFilter(
                 org.dhis2.commons.filters.ProgramType.ALL,
-                observableSortingInject, observableOpenFilter,
-                resources.filterResources.filterDateLabel()
+                observableSortingInject,
+                observableOpenFilter,
+                resources.filterDateLabel()
             ),
             HomeFilter.ORG_UNIT to OrgUnitFilter(
                 FilterManager.getInstance().observeOrgUnitFilters(),
                 org.dhis2.commons.filters.ProgramType.ALL,
                 observableSortingInject,
                 observableOpenFilter,
-                resources.filterResources.filterOrgUnitLabel()
+                resources.filterOrgUnitLabel()
             ),
             HomeFilter.SYNC_STATUS to SyncStateFilter(
                 org.dhis2.commons.filters.ProgramType.ALL,
-                observableSortingInject, observableOpenFilter,
-                resources.filterResources.filterSyncLabel()
+                observableSortingInject,
+                observableOpenFilter,
+                resources.filterSyncLabel()
             )
         )
 
@@ -472,7 +482,7 @@ class FilterRepository @Inject constructor(
                 programType = org.dhis2.commons.filters.ProgramType.ALL,
                 sortingItem = observableSortingInject,
                 openFilter = observableOpenFilter,
-                filterLabel = resources.filterResources.filterAssignedToMeLabel()
+                filterLabel = resources.filterAssignedToMeLabel()
             )
             homeFilter[HomeFilter.ASSIGNED_TO_ME] = assignToMeFilter
         }
@@ -508,7 +518,7 @@ class FilterRepository @Inject constructor(
 
         val filterPreList =
             getFiltersApplyingWebAppConfig.execute(defaultFilters, trackerFiltersWebApp)
-        val workingListFilter: WorkingListFilter? = getTrackerWorkingList(program, showWorkingLists)
+        val workingListFilter = getTrackerWorkingList(program, showWorkingLists)
 
         if (filterPreList.isEmpty() && workingListFilter == null) {
             return mutableListOf()
@@ -537,7 +547,7 @@ class FilterRepository @Inject constructor(
             org.dhis2.commons.filters.ProgramType.TRACKER,
             observableSortingInject,
             observableOpenFilter,
-            resources.filterResources.filterFollowUpLabel(teTypeName)
+            resources.filterFollowUpLabel(teTypeName)
         )
 
         if (filtersToShow.any { it.type == Filters.ASSIGNED_TO_ME }) {
@@ -556,13 +566,15 @@ class FilterRepository @Inject constructor(
 
         defaultTrackerFilters[ProgramFilter.EVENT_DATE] = PeriodFilter(
             org.dhis2.commons.filters.ProgramType.TRACKER,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterEventDateLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterEventDateLabel()
         )
         defaultTrackerFilters[ProgramFilter.ENROLLMENT_DATE] = EnrollmentDateFilter(
             org.dhis2.commons.filters.ProgramType.TRACKER,
-            observableSortingInject, observableOpenFilter,
-            program.enrollmentDateLabel() ?: resources.filterResources
+            observableSortingInject,
+            observableOpenFilter,
+            program.enrollmentDateLabel() ?: resources
                 .filterEnrollmentDateLabel()
         )
         defaultTrackerFilters[ProgramFilter.ORG_UNIT] = OrgUnitFilter(
@@ -570,22 +582,25 @@ class FilterRepository @Inject constructor(
             org.dhis2.commons.filters.ProgramType.TRACKER,
             observableSortingInject,
             observableOpenFilter,
-            resources.filterResources.filterOrgUnitLabel()
+            resources.filterOrgUnitLabel()
         )
         defaultTrackerFilters[ProgramFilter.SYNC_STATUS] = SyncStateFilter(
             org.dhis2.commons.filters.ProgramType.TRACKER,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterSyncLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterSyncLabel()
         )
         defaultTrackerFilters[ProgramFilter.ENROLLMENT_STATUS] = EnrollmentStatusFilter(
             org.dhis2.commons.filters.ProgramType.TRACKER,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterEnrollmentStatusLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterEnrollmentStatusLabel()
         )
         defaultTrackerFilters[ProgramFilter.EVENT_STATUS] = EventStatusFilter(
             org.dhis2.commons.filters.ProgramType.TRACKER,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterEventStatusLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterEventStatusLabel()
         )
 
         val stagesByProgramUidAndUserAssignment = d2.programModule()
@@ -600,7 +615,7 @@ class FilterRepository @Inject constructor(
                 programType = org.dhis2.commons.filters.ProgramType.TRACKER,
                 sortingItem = observableSortingInject,
                 openFilter = observableOpenFilter,
-                filterLabel = resources.filterResources.filterAssignedToMeLabel()
+                filterLabel = resources.filterAssignedToMeLabel()
             )
         }
 
@@ -618,19 +633,25 @@ class FilterRepository @Inject constructor(
             .byProgram().eq(program.uid())
             .withTrackedEntityInstanceEventFilters()
             .blockingGet()
-            .map {
-                WorkingListItem(
-                    it.uid(),
-                    it.displayName() ?: ""
-                )
-            }
+            .mapNotNull { teiFilterToWorkingListItemMapper.map(it) }
+            .toMutableList()
+
+        workingLists.addAll(
+            d2.programModule().programStageWorkingLists()
+                .byProgram().eq(program.uid())
+                .withAttributeValueFilters()
+                .blockingGet()
+                .mapNotNull { programStageToWorkingListItemMapper.map(it) }
+                .toMutableList()
+        )
 
         var workingListFilter: WorkingListFilter? = null
         if (workingLists.isNotEmpty()) {
             workingListFilter = WorkingListFilter(
                 workingLists,
                 org.dhis2.commons.filters.ProgramType.TRACKER,
-                observableSortingInject, observableOpenFilter,
+                observableSortingInject,
+                observableOpenFilter,
                 ""
             )
         }
@@ -678,18 +699,17 @@ class FilterRepository @Inject constructor(
 
     private fun getEventWorkingList(program: Program): WorkingListFilter? {
         var workingListFilter: WorkingListFilter? = null
-        val workingLists =
-            d2.eventModule().eventFilters().byProgram().eq(program.uid()).blockingGet().map {
-                WorkingListItem(
-                    it.uid(),
-                    it.displayName() ?: ""
-                )
-            }
+        val workingLists = d2.eventModule().eventFilters()
+            .byProgram().eq(program.uid())
+            .blockingGet()
+            .mapNotNull { eventFilterToWorkingListItemMapper.map(it) }
+
         if (workingLists.isNotEmpty()) {
             workingListFilter = WorkingListFilter(
                 workingLists,
                 org.dhis2.commons.filters.ProgramType.EVENT,
-                observableSortingInject, observableOpenFilter,
+                observableSortingInject,
+                observableOpenFilter,
                 ""
             )
         }
@@ -705,7 +725,7 @@ class FilterRepository @Inject constructor(
             org.dhis2.commons.filters.ProgramType.EVENT,
             observableSortingInject,
             observableOpenFilter,
-            resources.filterResources.filterDateLabel()
+            resources.filterDateLabel()
         )
 
         defaultEventFilter[ProgramFilter.ORG_UNIT] = OrgUnitFilter(
@@ -713,19 +733,21 @@ class FilterRepository @Inject constructor(
             org.dhis2.commons.filters.ProgramType.EVENT,
             observableSortingInject,
             observableOpenFilter,
-            resources.filterResources.filterOrgUnitLabel()
+            resources.filterOrgUnitLabel()
         )
 
         defaultEventFilter[ProgramFilter.SYNC_STATUS] = SyncStateFilter(
             org.dhis2.commons.filters.ProgramType.EVENT,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterSyncLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterSyncLabel()
         )
 
         defaultEventFilter[ProgramFilter.EVENT_STATUS] = EventStatusFilter(
             org.dhis2.commons.filters.ProgramType.EVENT,
-            observableSortingInject, observableOpenFilter,
-            resources.filterResources.filterEventStatusLabel()
+            observableSortingInject,
+            observableOpenFilter,
+            resources.filterEventStatusLabel()
         )
 
         val stagesByProgramAndUserAssignment = d2.programModule()
@@ -740,7 +762,7 @@ class FilterRepository @Inject constructor(
                 programType = org.dhis2.commons.filters.ProgramType.EVENT,
                 sortingItem = observableSortingInject,
                 openFilter = observableOpenFilter,
-                filterLabel = resources.filterResources.filterAssignedToMeLabel()
+                filterLabel = resources.filterAssignedToMeLabel()
             )
         }
         val categoryCombo =
@@ -764,7 +786,14 @@ class FilterRepository @Inject constructor(
         currentWorkingList: WorkingListItem?
     ): TrackedEntityInstanceQueryCollectionRepository {
         return currentWorkingList?.let {
-            teiQuery.byTrackedEntityInstanceFilter().eq(it.uid)
+            when (it) {
+                is EventWorkingList ->
+                    null
+                is ProgramStageWorkingList ->
+                    teiQuery.byProgramStageWorkingList().eq(it.uid)
+                is TrackedEntityInstanceWorkingList ->
+                    teiQuery.byTrackedEntityInstanceFilter().eq(it.uid)
+            }
         } ?: teiQuery
     }
 

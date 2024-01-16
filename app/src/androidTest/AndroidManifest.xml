@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- This Manifest will only apply changes to androidTest builds -->
+
+    <queries>
+        <package android:name="androidx.test.orchestrator.OrchestratorService"/>
+    </queries>
+
+    <application android:forceQueryable="true" />
+</manifest>

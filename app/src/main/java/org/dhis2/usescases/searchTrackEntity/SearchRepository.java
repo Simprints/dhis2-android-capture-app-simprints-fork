@@ -5,16 +5,16 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.paging.PagedList;
 
-import org.dhis2.data.search.SearchParametersModel;
-import org.dhis2.data.tuples.Pair;
-import org.dhis2.form.model.FieldUiModel;
-import org.dhis2.usescases.searchTrackEntity.adapters.SearchTeiModel;
-import org.dhis2.usescases.teiDashboard.dashboardfragments.teidata.teievents.EventViewModel;
+import org.dhis2.commons.data.EventViewModel;
+import org.dhis2.commons.data.SearchTeiModel;
+import org.dhis2.commons.data.tuples.Pair;
 import org.dhis2.commons.filters.sorting.SortingItem;
+import org.dhis2.data.search.SearchParametersModel;
 import org.hisp.dhis.android.core.arch.call.D2Progress;
 import org.hisp.dhis.android.core.organisationunit.OrganisationUnit;
 import org.hisp.dhis.android.core.program.Program;
 import org.hisp.dhis.android.core.trackedentity.TrackedEntityType;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -26,12 +26,12 @@ import io.reactivex.Observable;
 
 public interface SearchRepository {
 
-    Observable<List<FieldUiModel>> searchFields(@Nullable String programUid, Map<String, String> currentSearchValues);
-
     Observable<List<Program>> programsWithRegistration(String programTypeId);
 
     @NonNull
     LiveData<PagedList<SearchTeiModel>> searchTrackedEntities(SearchParametersModel searchParametersModel, boolean isOnline);
+
+    void clearFetchedList();
 
     @NonNull
     Flowable<List<SearchTeiModel>> searchTeiForMap(SearchParametersModel searchParametersModel, boolean isOnline);
@@ -45,8 +45,9 @@ public interface SearchRepository {
 
     String getProgramColor(@NonNull String programUid);
 
-
     Observable<TrackedEntityType> getTrackedEntityType(String trackedEntityUid);
+
+    TrackedEntityType getTrackedEntityType();
 
     List<EventViewModel> getEventsForMap(List<SearchTeiModel> teis);
 
@@ -54,8 +55,25 @@ public interface SearchRepository {
 
     Observable<D2Progress> downloadTei(String teiUid);
 
+    TeiDownloadResult download(String teiUid, @Nullable String enrollmentUid, String reason);
+
     void setCurrentProgram(@Nullable String currentProgram);
     boolean programHasAnalytics();
     boolean programHasCoordinates();
+
+    @Nullable Program getProgram(@Nullable String programUid);
+
+    @NotNull Map<String, String> filterQueryForProgram(@NotNull Map<String, String> queryData, @org.jetbrains.annotations.Nullable String programUid);
+
+    boolean canCreateInProgramWithoutSearch();
+
+    void setCurrentTheme(@org.jetbrains.annotations.Nullable ProgramSpinnerModel selectedProgram);
+
+    List<String> trackedEntityTypeFields();
+
+    boolean filtersApplyOnGlobalSearch();
+
     Observable<Boolean> programHasBiometrics();
+
+    String getBiometricAttributeUid();
 }

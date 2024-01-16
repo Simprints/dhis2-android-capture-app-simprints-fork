@@ -1,6 +1,6 @@
 package org.dhis2.bindings
 
-import org.dhis2.Bindings.withValueTypeCheck
+import org.dhis2.commons.bindings.withValueTypeCheck
 import org.hisp.dhis.android.core.common.ValueType
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,9 +47,9 @@ class ValueExtensionsTest {
 
         val expectedResults = arrayListOf(
             "",
-            "0.0",
+            "0",
             "0.2233",
-            "1.0",
+            "1",
             null
         )
 

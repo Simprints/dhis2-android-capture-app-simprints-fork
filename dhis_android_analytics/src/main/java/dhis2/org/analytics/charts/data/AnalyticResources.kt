@@ -38,11 +38,18 @@ class AnalyticResources(val context: Context) {
                     .format(analyticsException.uid)
             is AnalyticsException.ParserException ->
                 context.getString(R.string.error_parsing_visualization)
-            is AnalyticsException.ProgramIndicatorCustomBoundaries ->
-                context.getString(R.string.error_invalid_custom_boundaries)
-                    .format(analyticsException.programIndicator.displayName())
             is AnalyticsException.SQLException ->
                 context.getString(R.string.error_database)
+            is AnalyticsException.InvalidProgram ->
+                context.getString(R.string.error_invalid_program)
+                    .format(analyticsException.uid)
+            is AnalyticsException.InvalidTrackedEntityAttribute ->
+                context.getString(R.string.error_invalid_attribute)
+                    .format(analyticsException.uid)
+            is AnalyticsException.UnsupportedAggregationType ->
+                context.getString(R.string.error_unsupported_aggregation_type)
+                    .format(analyticsException.aggregationType.name)
+            else -> ""
         }
     }
 }

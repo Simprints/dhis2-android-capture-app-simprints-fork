@@ -10,13 +10,16 @@ import org.dhis2.commons.filters.AssignedFilter
 import org.dhis2.commons.filters.EnrollmentStatusFilter
 import org.dhis2.commons.filters.EventStatusFilter
 import org.dhis2.commons.filters.FilterItem
+import org.dhis2.commons.filters.FilterResources
 import org.dhis2.commons.filters.Filters
 import org.dhis2.commons.filters.PeriodFilter
 import org.dhis2.commons.filters.ProgramType
 import org.dhis2.commons.filters.data.FilterRepository
 import org.dhis2.commons.filters.data.GetFiltersApplyingWebAppConfig
 import org.dhis2.commons.filters.sorting.SortingItem
-import org.dhis2.commons.resources.ResourceManager
+import org.dhis2.commons.filters.workingLists.EventFilterToWorkingListItemMapper
+import org.dhis2.commons.filters.workingLists.ProgramStageToWorkingListItemMapper
+import org.dhis2.commons.filters.workingLists.TeiFilterToWorkingListItemMapper
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.program.Program
 import org.hisp.dhis.android.core.settings.FilterSetting
@@ -46,29 +49,39 @@ class FilterRepositoryTest {
     private val observableSortingInject = ObservableField<SortingItem>()
     private val observableOpenFilter = ObservableField<Filters>()
     private val d2: D2 = Mockito.mock(D2::class.java, Mockito.RETURNS_DEEP_STUBS)
-    private val resourceManager: ResourceManager = mock()
+    private val filterResources: FilterResources = mock()
     private val getFiltersApplyingWebAppConfig: GetFiltersApplyingWebAppConfig = mock()
+    private val eventFilterToWorkingListItemMapper: EventFilterToWorkingListItemMapper = mock()
+    private val teiFilterToWorkingListItemMapper: TeiFilterToWorkingListItemMapper =
+        TeiFilterToWorkingListItemMapper("defaultLabel")
+    private val programStageToWorkingListItemMapper: ProgramStageToWorkingListItemMapper = mock()
     private lateinit var filterRepository: FilterRepository
 
     @Before
     fun setUp() {
         mockFilterLabels()
-        filterRepository = FilterRepository(d2, resourceManager, getFiltersApplyingWebAppConfig)
+        filterRepository = FilterRepository(
+            d2,
+            filterResources,
+            getFiltersApplyingWebAppConfig,
+            eventFilterToWorkingListItemMapper,
+            teiFilterToWorkingListItemMapper,
+            programStageToWorkingListItemMapper
+        )
     }
 
     private fun mockFilterLabels() {
-        whenever(resourceManager.filterResources) doReturn mock()
-        whenever(resourceManager.filterResources.filterOrgUnitLabel()) doReturn ORG_UNIT
-        whenever(resourceManager.filterResources.filterSyncLabel()) doReturn SYNC_STATUS
-        whenever(resourceManager.filterResources.filterEnrollmentStatusLabel()) doReturn
+        whenever(filterResources.filterOrgUnitLabel()) doReturn ORG_UNIT
+        whenever(filterResources.filterSyncLabel()) doReturn SYNC_STATUS
+        whenever(filterResources.filterEnrollmentStatusLabel()) doReturn
             ENROLLMENT_STATUS
-        whenever(resourceManager.filterResources.filterDateLabel()) doReturn EVENT_DATE
-        whenever(resourceManager.filterResources.filterEventStatusLabel()) doReturn EVENT_STATUS
-        whenever(resourceManager.filterResources.filterEnrollmentDateLabel()) doReturn
+        whenever(filterResources.filterDateLabel()) doReturn EVENT_DATE
+        whenever(filterResources.filterEventStatusLabel()) doReturn EVENT_STATUS
+        whenever(filterResources.filterEnrollmentDateLabel()) doReturn
             ENROLLMENT_DATE
-        whenever(resourceManager.filterResources.filterAssignedToMeLabel()) doReturn ASSIGN_TO_ME
-        whenever(resourceManager.filterResources.filterEventDateLabel()) doReturn EVENT_DATE
-        whenever(resourceManager.filterResources.filterFollowUpLabel("Name")) doReturn FOLLOW_UP
+        whenever(filterResources.filterAssignedToMeLabel()) doReturn ASSIGN_TO_ME
+        whenever(filterResources.filterEventDateLabel()) doReturn EVENT_DATE
+        whenever(filterResources.filterFollowUpLabel("Name")) doReturn FOLLOW_UP
     }
 
     @Test
@@ -299,6 +312,17 @@ class FilterRepositoryTest {
             d2.trackedEntityModule().trackedEntityTypes().uid(program.trackedEntityType()?.uid())
                 .blockingGet().displayName()
         ) doReturn program.trackedEntityType()?.displayName()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+        ) doReturn mock()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+                .withAttributeValueFilters()
+        ) doReturn mock()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+                .withAttributeValueFilters().blockingGet()
+        ) doReturn emptyList()
 
         val result = filterRepository.programFilters(program.uid())
 
@@ -369,6 +393,17 @@ class FilterRepositoryTest {
             d2.trackedEntityModule().trackedEntityTypes().uid(program.trackedEntityType()?.uid())
                 .blockingGet().displayName()
         ) doReturn program.trackedEntityType()?.displayName()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+        ) doReturn mock()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+                .withAttributeValueFilters()
+        ) doReturn mock()
+        whenever(
+            d2.programModule().programStageWorkingLists().byProgram().eq(program.uid())
+                .withAttributeValueFilters().blockingGet()
+        ) doReturn emptyList()
 
         val result = filterRepository.programFilters(program.uid())
 

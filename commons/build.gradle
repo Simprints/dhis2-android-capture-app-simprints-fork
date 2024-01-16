@@ -2,10 +2,10 @@ plugins {
     id 'com.android.library'
     id 'kotlin-android'
     id 'kotlin-kapt'
+    id 'kotlin-parcelize'
+    id 'com.autonomousapps.dependency-analysis' version "1.19.0"
 }
-
-def libraries = rootProject.ext.libraries
-def versions = rootProject.ext.versions
+apply from: "$project.rootDir/jacoco/jacoco.gradle"
 
 repositories {
     maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
@@ -13,7 +13,7 @@ repositories {
 
 android {
     compileSdkVersion versions.sdk
-    buildToolsVersion versions.tools
+    namespace "org.dhis2.commons"
 
     defaultConfig {
         minSdkVersion versions.minSdk
@@ -27,7 +27,7 @@ android {
     }
 
     buildTypes {
-        debug{
+        debug {
 
         }
         release {
@@ -39,54 +39,85 @@ android {
     flavorDimensions "default"
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility versions.sourceCompat
+        targetCompatibility versions.targetCompat
     }
 
     buildFeatures {
+        compose true
         dataBinding true
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = versions.targetCompat
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = versions.kotlinCompilerExtensionVersion
     }
 }
 
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
+    api project(":ui-components")
 
-    debugApi project(':core')
-    releaseApi("org.hisp.dhis:android-core:${libraries.dhis2sdk}") {
+    api project(':core')
+/*    api("org.hisp.dhis:android-core:${libraries.dhis2sdk}") {
         exclude group: "org.hisp.dhis", module: "core-rules"
+        exclude group: "com.facebook.flipper"
+    }*/
+
+    api(libs.dhis2.ruleEngine) {
+        exclude group: "junit", module: "junit"
     }
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    kapt libs.kotlin.metadataJVM
 
-    implementation "androidx.core:core-ktx:${libraries.corektx}"
-    implementation "androidx.appcompat:appcompat:${libraries.appcompat}"
-    implementation "com.google.android.material:material:${libraries.material}"
-    implementation "com.google.code.gson:gson:${libraries.gson}"
-    implementation "de.adorsys.android:securestoragelibrary:${libraries.latestSecureStorageVersion}"
-    implementation "com.google.dagger:dagger:${libraries.dagger}"
-    kapt "com.google.dagger:dagger-compiler:${libraries.dagger}"
-    implementation "androidx.fragment:fragment-ktx:${libraries.fragmentktx}"
-    implementation "androidx.lifecycle:lifecycle-livedata-ktx:${libraries.lifecycle}"
-    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:${libraries.lifecycle}"
-    implementation "androidx.lifecycle:lifecycle-extensions:${libraries.lifecycle}"
-    implementation "androidx.recyclerview:recyclerview:${libraries.recyclerview}"
-    implementation "io.reactivex.rxjava2:rxjava:${libraries.rxjava}"
-    implementation "io.reactivex.rxjava2:rxandroid:${libraries.rxandroid}"
+    api libs.google.autoValue
+    kapt libs.google.autoValue
+    api libs.androidx.coreKtx
+    api libs.androidx.appcompat
+    api libs.androidx.fragmentKtx
+    api libs.androidx.liveDataKtx
+    api libs.androidx.viewModelKtx
+    api libs.androidx.lifecycleExtensions
+    api libs.androidx.recyclerView
+    debugApi libs.androidx.composeUiTooling
+    api libs.androidx.compose
+    api libs.androidx.composeConstraintLayout
+    api libs.androidx.composePreview
+    api libs.androidx.composeUi
+    api libs.androidx.composeLiveData
 
-    //Timber
-    implementation "com.jakewharton.timber:timber:${libraries.timber}"
+    api libs.google.material
+    api libs.google.gson
+    api libs.dagger.dagger
+    kapt libs.dagger.daggerCompiler
+    api libs.google.materialThemeAdapter
+    api libs.barcodeScanner.zxing
+    api libs.security.secureStorage
+    api libs.rx.rxJava
+    api libs.rx.rxAndroid
+    api libs.analytics.timber
+    api libs.github.glide
+    kapt libs.github.glideCompiler
+    api(libs.barcodeScanner.scanner) {
+        exclude group: "com.google.zxing", module: "core"
+    }
+    api(libs.barcodeScanner.zxingAndroid) {
+        exclude group: "com.google.zxing", module: "core"
+    }
+    api libs.rx.rxBindings
+    api libs.rx.rxBindingsCompat
 
-    api "com.github.bumptech.glide:glide:${libraries.glide}"
-    kapt "com.github.bumptech.glide:compiler:${libraries.glide}"
+    testApi libs.test.junit
+    androidTestApi libs.test.testJUnitExt
+    androidTestApi libs.test.espresso
+    androidTestApi libs.test.espressoIdlingResources
+    api libs.test.espressoIdlingResources
+    api libs.test.espressoIdlingConcurrent
 
-    testImplementation 'junit:junit:4.13.2'
-
-    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
-    implementation 'androidx.test.espresso:espresso-idling-resource:3.3.0'
+    api libs.analytics.sentry
+    implementation libs.github.treeView
 
 }

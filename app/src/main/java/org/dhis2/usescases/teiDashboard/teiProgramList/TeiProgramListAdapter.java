@@ -1,21 +1,19 @@
 package org.dhis2.usescases.teiDashboard.teiProgramList;
 
-import androidx.databinding.DataBindingUtil;
-import androidx.databinding.ViewDataBinding;
-import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.compose.ui.platform.ComposeView;
+import androidx.databinding.DataBindingUtil;
+import androidx.databinding.ViewDataBinding;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.dhis2.R;
 import org.dhis2.usescases.main.program.ProgramViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
-
-/**
- * QUADRAM. Created by Cristian on 13/02/2018.
- */
 
 public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEnrollmentViewHolder> {
 
@@ -40,6 +38,7 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
     public TeiProgramListEnrollmentViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         ViewDataBinding binding;
+        ComposeView composeView = null;
 
         switch (viewType) {
             case TeiProgramListItem.TeiProgramListItemViewType.ALL_PROGRAMS_DASHBOARD:
@@ -65,13 +64,14 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
                 break;
             case TeiProgramListItem.TeiProgramListItemViewType.PROGRAMS_TO_ENROLL:
                 binding = DataBindingUtil.inflate(inflater, R.layout.item_tei_programs_programs, parent, false);
+                composeView = new ComposeView(parent.getContext());
                 break;
             default:
                 binding = DataBindingUtil.inflate(inflater, R.layout.item_tei_programs_enrollment, parent, false);
                 break;
         }
 
-        return new TeiProgramListEnrollmentViewHolder(binding);
+        return new TeiProgramListEnrollmentViewHolder(binding, composeView);
     }
 
     @Override
@@ -83,7 +83,7 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
     public void onBindViewHolder(@NonNull TeiProgramListEnrollmentViewHolder holder, int position) {
         switch (listItems.get(position).getViewType()) {
             case TeiProgramListItem.TeiProgramListItemViewType.ALL_PROGRAMS_DASHBOARD:
-                holder.bind(presenter,null,null);
+                holder.bind(presenter, null, null);
                 break;
             case TeiProgramListItem.TeiProgramListItemViewType.FIRST_TITLE:
                 holder.bind(presenter, null, null);
@@ -139,7 +139,9 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
         listItems.clear();
 
         TeiProgramListItem allProgramsDashBoardItem = new TeiProgramListItem(null, null, TeiProgramListItem.TeiProgramListItemViewType.ALL_PROGRAMS_DASHBOARD);
-        listItems.add(allProgramsDashBoardItem);
+        if (!activeEnrollments.isEmpty()) {
+            listItems.add(allProgramsDashBoardItem);
+        }
 
         TeiProgramListItem firstTeiProgramListItem = new TeiProgramListItem(null, null, TeiProgramListItem.TeiProgramListItemViewType.FIRST_TITLE);
         listItems.add(firstTeiProgramListItem);
@@ -165,7 +167,7 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
             found = false;
             active = false;
             for (EnrollmentViewModel enrollment : activeEnrollments) {
-                if (programModel.title().equals(enrollment.programName())) {
+                if (programModel.getTitle().equals(enrollment.programName())) {
                     found = true;
                     active = true;
                 }
@@ -173,14 +175,14 @@ public class TeiProgramListAdapter extends RecyclerView.Adapter<TeiProgramListEn
 
             if (!found)
                 for (EnrollmentViewModel enrollment : inactiveEnrollments) {
-                    if (programModel.title().equals(enrollment.programName())) {
+                    if (programModel.getTitle().equals(enrollment.programName())) {
                         found = true;
                         active = false;
                     }
                 }
 
             if (found) {
-                if (!active && !programModel.onlyEnrollOnce())
+                if (!active && !programModel.getOnlyEnrollOnce())
                     possibleEnrollmentPrograms.add(programModel);
             } else
                 possibleEnrollmentPrograms.add(programModel);

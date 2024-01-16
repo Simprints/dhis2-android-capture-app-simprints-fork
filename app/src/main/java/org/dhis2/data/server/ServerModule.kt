@@ -5,31 +5,46 @@ import dagger.Module
 import dagger.Provides
 import dhis2.org.analytics.charts.Charts
 import dhis2.org.analytics.charts.DhisAnalyticCharts
-import java.util.ArrayList
 import okhttp3.Interceptor
 import org.dhis2.Bindings.app
 import org.dhis2.BuildConfig
 import org.dhis2.R
 import org.dhis2.commons.di.dagger.PerServer
 import org.dhis2.commons.filters.data.GetFiltersApplyingWebAppConfig
+import org.dhis2.commons.prefs.PreferenceProvider
 import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.data.dhislogic.DhisPeriodUtils
-import org.dhis2.utils.RulesUtilsProvider
-import org.dhis2.utils.RulesUtilsProviderImpl
+import org.dhis2.data.service.SyncStatusController
+import org.dhis2.data.service.VersionRepository
+import org.dhis2.form.data.RulesUtilsProvider
+import org.dhis2.form.data.RulesUtilsProviderImpl
+import org.dhis2.metadata.usecases.DataSetConfiguration
+import org.dhis2.metadata.usecases.ProgramConfiguration
+import org.dhis2.metadata.usecases.TrackedEntityTypeConfiguration
+import org.dhis2.ui.ThemeManager
 import org.dhis2.utils.analytics.AnalyticsHelper
 import org.dhis2.utils.analytics.AnalyticsInterceptor
-import org.dhis2.utils.reporting.SentryOkHttpInterceptor
 import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.D2Configuration
 import org.hisp.dhis.android.core.D2Manager
+import org.hisp.dhis.android.core.D2Manager.blockingInstantiateD2
 
 @Module
-@PerServer
 class ServerModule {
     @Provides
     @PerServer
-    fun sdk(): D2 {
+    fun sdk(context: Context): D2 {
+        if (!D2Manager.isD2Instantiated()) {
+            blockingInstantiateD2(getD2Configuration(context))
+                ?.userModule()?.accountManager()?.setMaxAccounts(null)
+        }
         return D2Manager.getD2()
+    }
+
+    @Provides
+    @PerServer
+    fun sdkInstantiated(): ServerStatus {
+        return ServerStatus(D2Manager.isD2Instantiated())
     }
 
     @Provides
@@ -79,6 +94,34 @@ class ServerModule {
         return ServerSettingsRepository(d2, systemStyleMapper)
     }
 
+    @Provides
+    @PerServer
+    fun providesThemeManager(
+        userManager: UserManager,
+        d2: D2,
+        preferenceProvider: PreferenceProvider
+    ): ThemeManager {
+        return ThemeManager(
+            userManager,
+            ProgramConfiguration(d2),
+            DataSetConfiguration(d2),
+            TrackedEntityTypeConfiguration(d2),
+            preferenceProvider
+        )
+    }
+
+    @Provides
+    @PerServer
+    fun providesSyncStatusController(): SyncStatusController {
+        return SyncStatusController()
+    }
+
+    @Provides
+    @PerServer
+    fun providesVersionStatusController(d2: D2): VersionRepository {
+        return VersionRepository(d2)
+    }
+
     companion object {
         @JvmStatic
         fun getD2Configuration(context: Context): D2Configuration {
@@ -90,11 +133,6 @@ class ServerModule {
             interceptors.add(
                 AnalyticsInterceptor(
                     AnalyticsHelper(context.app().appComponent().matomoController())
-                )
-            )
-            interceptors.add(
-                SentryOkHttpInterceptor(
-                    context.app().appComponent().preferenceProvider()
                 )
             )
             return D2Configuration.builder()

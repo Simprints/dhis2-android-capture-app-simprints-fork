@@ -1,51 +1,165 @@
 package dhis2.org.analytics.charts.mappers
 
-import android.content.Context
 import android.view.View
-import android.widget.TextView
-import com.evrencoskun.tableview.TableView
-import dhis2.org.R
+import androidx.compose.material.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import com.google.android.material.composethemeadapter.MdcTheme
 import dhis2.org.analytics.charts.data.ChartType
 import dhis2.org.analytics.charts.data.Graph
 import dhis2.org.analytics.charts.data.SerieData
-import dhis2.org.analytics.charts.table.GraphTableAdapter
+import dhis2.org.analytics.charts.table.CellModel
+import kotlin.math.roundToInt
+import org.dhis2.composetable.TableScreenState
+import org.dhis2.composetable.model.RowHeader
+import org.dhis2.composetable.model.TableCell
+import org.dhis2.composetable.model.TableHeader
+import org.dhis2.composetable.model.TableHeaderCell
+import org.dhis2.composetable.model.TableHeaderRow
+import org.dhis2.composetable.model.TableModel
+import org.dhis2.composetable.model.TableRowModel
+import org.dhis2.composetable.ui.DataSetTableScreen
+import org.dhis2.composetable.ui.MAX_CELL_WIDTH_SPACE
+import org.dhis2.composetable.ui.TableColors
+import org.dhis2.composetable.ui.TableConfiguration
+import org.dhis2.composetable.ui.TableDimensions
+import org.dhis2.composetable.ui.TableTheme
 import org.hisp.dhis.android.core.arch.helpers.DateUtils
 
 class GraphToTable {
-    fun map(context: Context, graph: Graph): View {
-        if (graph.series.isEmpty()) {
-            return TextView(context).apply {
-                text = context.getString(R.string.no_data)
+
+    @Composable
+    fun mapToCompose(graph: Graph, resetDimensionButton: View?) {
+        val headers = headers(graph, graph.series)
+        val rows = rows(graph.series)
+        val cells = cells(graph, graph.series, headers)
+
+        val tableHeader = TableHeader(
+            rows = rows.map { headerRow ->
+                TableHeaderRow(
+                    cells = headerRow.map { headerRowCell ->
+                        TableHeaderCell(
+                            value = headerRowCell.text
+                        )
+                    }
+                )
+            }
+        )
+
+        val tableRows = headers.mapIndexed { rowIndex, rowHeaderCell ->
+            TableRowModel(
+                rowHeader = RowHeader(
+                    id = rowHeaderCell?.text ?: rowIndex.toString(),
+                    title = rowHeaderCell?.text ?: "-",
+                    row = rowIndex
+                ),
+                values = cells[rowIndex].mapIndexed { columnIndex, cellModel ->
+                    columnIndex to TableCell(
+                        id = "${rowIndex}_$columnIndex",
+                        row = rowIndex,
+                        column = columnIndex,
+                        value = cellModel.text,
+                        editable = false,
+                        mandatory = false,
+                        error = null,
+                        legendColor = cellModel.color
+                    )
+                }.toMap(),
+                isLastRow = headers.lastIndex == rowIndex,
+                maxLines = if (cells[rowIndex].any { it.text.toDoubleOrNull() != null }) {
+                    1
+                } else {
+                    3
+                }
+            )
+        }
+
+        val tableModel = TableModel(
+            tableHeaderModel = tableHeader,
+            tableRows = tableRows
+        )
+
+        val localDensity = LocalDensity.current
+        val conf = LocalConfiguration.current
+
+        return MdcTheme {
+            var dimensions by remember {
+                mutableStateOf(
+                    TableDimensions(
+                        cellVerticalPadding = 11.dp,
+                        maxRowHeaderWidth = with(localDensity) {
+                            (conf.screenWidthDp.dp.toPx() - MAX_CELL_WIDTH_SPACE.toPx())
+                                .roundToInt()
+                        },
+                        tableHorizontalPadding = 0.dp,
+                        tableVerticalPadding = 0.dp,
+                        extraWidths = emptyMap(),
+                        rowHeaderWidths = emptyMap(),
+                        columnWidth = emptyMap()
+                    )
+                )
+            }
+
+            resetDimensionButton?.visibility = if (
+                dimensions.hasOverriddenWidths(tableModel.id ?: "")
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+            resetDimensionButton?.setOnClickListener {
+                dimensions = dimensions.resetWidth(tableModel.id ?: "")
+            }
+
+            TableTheme(
+                tableColors = TableColors(
+                    primary = MaterialTheme.colors.primary,
+                    primaryLight = MaterialTheme.colors.primary.copy(alpha = 0.2f),
+                    disabledCellText = TableTheme.colors.cellText,
+                    disabledCellBackground = TableTheme.colors.tableBackground
+                ),
+                tableConfiguration = TableConfiguration(
+                    headerActionsEnabled = false,
+                    editable = false
+                ),
+                tableDimensions = dimensions
+            ) {
+                DataSetTableScreen(
+                    tableScreenState = TableScreenState(
+                        tables = listOf(tableModel)
+                    ),
+                    onCellClick = { _, _, _ -> null },
+                    onEdition = {},
+                    onSaveValue = {},
+                    onTableWidthChanged = { width ->
+                        dimensions = dimensions.copy(totalWidth = width)
+                    },
+                    onRowHeaderResize = { tableId, newValue ->
+                        dimensions = dimensions.updateHeaderWidth(tableId, newValue)
+                    },
+                    onColumnHeaderResize = { tableId, column, newValue ->
+                        dimensions =
+                            dimensions.updateColumnWidth(tableId, column, newValue)
+                    },
+                    onTableDimensionResize = { tableId, newValue ->
+                        dimensions = dimensions.updateAllWidthBy(tableId, newValue)
+                    },
+                    onTableDimensionReset = { tableId ->
+                        dimensions = dimensions.resetWidth(tableId)
+                    }
+                )
             }
         }
-
-        val series = if (graph.chartType == ChartType.NUTRITION) {
-            listOf(graph.series.last())
-        } else {
-            graph.series
-        }
-
-        val headers = headers(graph, series)
-        val rows = rows(series)
-        val cells = cells(graph, series, headers)
-
-        val tableView = TableView(context)
-        val tableAdapter = GraphTableAdapter(context)
-        tableView.isShowHorizontalSeparators = false
-        tableView.adapter = tableAdapter
-        tableView.isIgnoreSelectionColors = true
-        tableView.headerCount = rows.size
-
-        tableAdapter.setAllItems(
-            rows,
-            headers,
-            cells,
-            false
-        )
-        return tableView
     }
 
-    private fun headers(graph: Graph, series: List<SerieData>): List<String?> {
+    private fun headers(graph: Graph, series: List<SerieData>): List<CellModel?> {
         return if (graph.categories.isEmpty()) {
             series.map { it.coordinates }
                 .flatten()
@@ -53,68 +167,56 @@ class GraphToTable {
                 .sortedBy { it.eventDate }
                 .map {
                     when (graph.chartType) {
-                        ChartType.PIE_CHART -> it.legend
-                        else -> DateUtils.SIMPLE_DATE_FORMAT.format(it.eventDate)
+                        ChartType.PIE_CHART -> CellModel(it.legend ?: "")
+                        else -> CellModel(DateUtils.SIMPLE_DATE_FORMAT.format(it.eventDate))
                     }
                 }
         } else {
-            graph.categories
+            graph.categories.map { CellModel(it) }
         }
     }
 
-    private fun rows(series: List<SerieData>): List<List<String>> {
+    private fun rows(series: List<SerieData>): List<List<CellModel>> {
         return if (series.first().fieldName.contains("_")) {
             val splitted = series.map { it.fieldName.split("_") }
             val combination = splitted.first().size
-            val headerList = mutableListOf<List<String>>()
+            val headerList = mutableListOf<List<CellModel>>()
             for (i in 0 until combination) {
                 val values = splitted.map { it[i] }
                 headerList.add(
                     values.filterIndexed { index, value ->
                         index == 0 || values[index - 1] != value
-                    }
+                    }.map { CellModel(it) }
                 )
             }
             headerList
         } else {
-            listOf(series.map { it.fieldName })
+            listOf(series.map { CellModel(it.fieldName) })
         }
     }
 
     private fun cells(
         graph: Graph,
         series: List<SerieData>,
-        headers: List<String?>
-    ): List<List<String>> {
-        return if (graph.categories.isEmpty()) {
+        headers: List<CellModel?>
+    ): List<List<CellModel>> {
+        return headers.mapIndexed { index, header ->
             series.map { serie ->
-                mutableListOf<String>().apply {
-                    headers.forEach { headerLabel ->
-                        add(
-                            serie.coordinates.firstOrNull {
-                                when (graph.chartType) {
-                                    ChartType.PIE_CHART -> it.legend == headerLabel
-                                    else ->
-                                        DateUtils.SIMPLE_DATE_FORMAT.format(it.eventDate) ==
-                                            headerLabel
-                                }
-                            }?.fieldValue?.toString()
-                                ?: ""
-                        )
+                val point = serie.coordinates.firstOrNull { point ->
+                    if (graph.categories.isEmpty()) {
+                        when (graph.chartType) {
+                            ChartType.PIE_CHART -> point.legend == header?.text
+                            else ->
+                                DateUtils.SIMPLE_DATE_FORMAT.format(point.eventDate) == header?.text
+                        }
+                    } else {
+                        point.position?.toInt() == index
                     }
                 }
-            }
-        } else {
-            return mutableListOf<List<String>>().apply {
-                headers.forEachIndexed { index, s ->
-                    add(
-                        series.map {
-                            it.coordinates.firstOrNull { point ->
-                                point.position?.toInt() == index
-                            }?.fieldValue?.toString() ?: ""
-                        }
-                    )
-                }
+                CellModel(
+                    point?.fieldValue?.toString() ?: "",
+                    point?.legendValue?.color
+                )
             }
         }
     }

@@ -13,7 +13,7 @@ class DimensionRowCombinatorTest {
     private val dimensionRowCombinator = DimensionRowCombinator()
 
     @Test
-    fun test() {
+    fun shouldCombineRows() {
         val finalList = mutableListOf<String>()
         dimensionRowCombinator.combineWithNextItem(
             gridAnalyticsResponse = testGridAnalyticsResponse(),
@@ -37,37 +37,54 @@ class DimensionRowCombinatorTest {
         )
     }
 
-    private fun testGridAnalyticsResponse() = GridAnalyticsResponseSamples.sample1.copy(
-        metadata = GridAnalyticsResponseSamples.sample1.metadata.toMutableMap().apply {
-            putAll(
-                mapOf(
-                    row11.uid() to MetadataItem.CategoryOptionItem(row11),
-                    row12.uid() to MetadataItem.CategoryOptionItem(row12),
-                    row21.uid() to MetadataItem.CategoryOptionItem(row21),
-                    row22.uid() to MetadataItem.CategoryOptionItem(row22),
-                    row23.uid() to MetadataItem.CategoryOptionItem(row23),
-                    row31.uid() to MetadataItem.CategoryOptionItem(row31),
-                    row32.uid() to MetadataItem.CategoryOptionItem(row32)
+    @Test
+    fun shouldNotCombineIfThereAreNoRows() {
+        val finalList = mutableListOf<String>()
+        dimensionRowCombinator.combineWithNextItem(
+            gridAnalyticsResponse = testGridAnalyticsResponse(emptyList()),
+            currentList = finalList,
+            hasMoreRows = false
+        )
+
+        assertTrue(
+            finalList.isEmpty()
+        )
+    }
+
+    private fun testGridAnalyticsResponse(testingRows: List<List<GridHeaderItem>> = testingRows()) =
+        GridAnalyticsResponseSamples.sample1.copy(
+            metadata = GridAnalyticsResponseSamples.sample1.metadata.toMutableMap().apply {
+                putAll(
+                    mapOf(
+                        row11.uid() to MetadataItem.CategoryOptionItem(row11),
+                        row12.uid() to MetadataItem.CategoryOptionItem(row12),
+                        row21.uid() to MetadataItem.CategoryOptionItem(row21),
+                        row22.uid() to MetadataItem.CategoryOptionItem(row22),
+                        row23.uid() to MetadataItem.CategoryOptionItem(row23),
+                        row31.uid() to MetadataItem.CategoryOptionItem(row31),
+                        row32.uid() to MetadataItem.CategoryOptionItem(row32)
+                    )
                 )
+            },
+            headers = GridHeader(
+                columns = GridAnalyticsResponseSamples.sample1.headers.columns,
+                rows = testingRows
             )
-        },
-        headers = GridHeader(
-            columns = GridAnalyticsResponseSamples.sample1.headers.columns,
-            rows = listOf(
-                listOf(
-                    GridHeaderItem(row11.uid(), 6),
-                    GridHeaderItem(row12.uid(), 6)
-                ),
-                listOf(
-                    GridHeaderItem(row21.uid(), 2),
-                    GridHeaderItem(row22.uid(), 2),
-                    GridHeaderItem(row23.uid(), 2)
-                ),
-                listOf(
-                    GridHeaderItem(row31.uid(), 1),
-                    GridHeaderItem(row32.uid(), 1)
-                )
-            )
+        )
+
+    private fun testingRows() = listOf(
+        listOf(
+            GridHeaderItem(row11.uid(), 6),
+            GridHeaderItem(row12.uid(), 6)
+        ),
+        listOf(
+            GridHeaderItem(row21.uid(), 2),
+            GridHeaderItem(row22.uid(), 2),
+            GridHeaderItem(row23.uid(), 2)
+        ),
+        listOf(
+            GridHeaderItem(row31.uid(), 1),
+            GridHeaderItem(row32.uid(), 1)
         )
     )
 
